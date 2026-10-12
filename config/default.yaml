@@ -15,6 +15,8 @@ bin:
   alpha: 0.85                   # chosen: paper defines W_th = alpha * W_max but never gives alpha
   yellow_threshold_pct: 60.0    # paper: YELLOW when 60 <= Fv < 80 and load-cell flag is 0
   red_threshold_pct: 80.0       # paper: RED when Fv >= 80 or load-cell flag is 1
+  density_kg_per_pct: 0.5       # chosen: kg of waste per 1% of bin volume (= w_max_kg / 100)
+  density_cv: 0.3               # chosen: per-bin spread of that density; 0 makes the load cell useless
 
 sensors:
   n_ultrasonic: 3               # paper: 3 ultrasonic sensors (left / center / right)
@@ -22,6 +24,15 @@ sensors:
   bias_max_cm: 3.0              # chosen: max absolute constant per-sensor bias
   stuck_probability: 0.01       # chosen: per-reading chance a sensor repeats its last value
   uneven_fill_skew_cm: 10.0     # chosen: max lateral height difference across the 3 sensors
+  min_distance_cm: 2.0          # chosen: HC-SR04 minimum range; readings clamp here on a full bin
+  load_cell_sigma_kg: 0.3       # chosen: Gaussian load-cell noise (paper reports none)
+  load_cell_bias_max_kg: 0.5    # chosen: max absolute constant load-cell miscalibration
+
+fusion_eval:
+  n_bins: 200                   # chosen: independent bins simulated per noise scenario
+  days: 30                      # chosen: days per bin (matches the paper's 30-day horizon)
+  sweep_samples: 20000          # chosen: samples in the diagnostic uniform-fill sweep
+  bootstrap_resamples: 2000     # chosen: bin-level bootstrap resamples for the 95% CIs
 
 sim:
   n_bins: 5000                  # paper: 5000 bins in the city-scale simulation

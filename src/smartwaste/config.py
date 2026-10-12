@@ -37,6 +37,8 @@ class BinConfig:
     alpha: float
     yellow_threshold_pct: float
     red_threshold_pct: float
+    density_kg_per_pct: float
+    density_cv: float
 
     def validate(self) -> None:
         if self.height_cm <= 0:
@@ -50,6 +52,10 @@ class BinConfig:
                 "bin thresholds must satisfy 0 <= yellow < red <= 100, got "
                 f"yellow={self.yellow_threshold_pct}, red={self.red_threshold_pct}"
             )
+        if self.density_kg_per_pct <= 0:
+            raise ConfigError(f"bin.density_kg_per_pct must be > 0, got {self.density_kg_per_pct}")
+        if not 0 <= self.density_cv < 1:
+            raise ConfigError(f"bin.density_cv must be in [0, 1), got {self.density_cv}")
 
     @property
     def weight_threshold_kg(self) -> float:
@@ -66,6 +72,9 @@ class SensorsConfig:
     bias_max_cm: float
     stuck_probability: float
     uneven_fill_skew_cm: float
+    min_distance_cm: float
+    load_cell_sigma_kg: float
+    load_cell_bias_max_kg: float
 
     def validate(self) -> None:
         if self.n_ultrasonic < 1:
@@ -81,6 +90,16 @@ class SensorsConfig:
         if self.uneven_fill_skew_cm < 0:
             raise ConfigError(
                 f"sensors.uneven_fill_skew_cm must be >= 0, got {self.uneven_fill_skew_cm}"
+            )
+        if self.min_distance_cm < 0:
+            raise ConfigError(f"sensors.min_distance_cm must be >= 0, got {self.min_distance_cm}")
+        if self.load_cell_sigma_kg < 0:
+            raise ConfigError(
+                f"sensors.load_cell_sigma_kg must be >= 0, got {self.load_cell_sigma_kg}"
+            )
+        if self.load_cell_bias_max_kg < 0:
+            raise ConfigError(
+                f"sensors.load_cell_bias_max_kg must be >= 0, got {self.load_cell_bias_max_kg}"
             )
 
 
@@ -163,6 +182,28 @@ class RoutingConfig:
 
 
 @dataclass(frozen=True)
+class FusionEvalConfig:
+    """Size of the Phase 1 sensor-fusion evaluation."""
+
+    n_bins: int
+    days: int
+    sweep_samples: int
+    bootstrap_resamples: int
+
+    def validate(self) -> None:
+        if self.n_bins < 1:
+            raise ConfigError(f"fusion_eval.n_bins must be >= 1, got {self.n_bins}")
+        if self.days < 1:
+            raise ConfigError(f"fusion_eval.days must be >= 1, got {self.days}")
+        if self.sweep_samples < 1:
+            raise ConfigError(f"fusion_eval.sweep_samples must be >= 1, got {self.sweep_samples}")
+        if self.bootstrap_resamples < 1:
+            raise ConfigError(
+                f"fusion_eval.bootstrap_resamples must be >= 1, got {self.bootstrap_resamples}"
+            )
+
+
+@dataclass(frozen=True)
 class PathsConfig:
     """Output and cache directories, relative to the repo root unless absolute."""
 
@@ -192,6 +233,7 @@ class Config:
     sim: SimConfig
     cost: CostConfig
     routing: RoutingConfig
+    fusion_eval: FusionEvalConfig
     paths: PathsConfig
 
     def validate(self) -> None:
@@ -202,6 +244,7 @@ class Config:
         self.sim.validate()
         self.cost.validate()
         self.routing.validate()
+        self.fusion_eval.validate()
         self.paths.validate()
 
 
@@ -237,6 +280,7 @@ def load_config(
         sim=_section(raw, "sim", SimConfig),
         cost=_section(raw, "cost", CostConfig),
         routing=_section(raw, "routing", RoutingConfig),
+        fusion_eval=_section(raw, "fusion_eval", FusionEvalConfig),
         paths=_section(raw, "paths", PathsConfig),
     )
     cfg.validate()

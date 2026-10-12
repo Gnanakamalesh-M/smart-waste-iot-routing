@@ -29,6 +29,41 @@ def test_loads_real_default_yaml_with_expected_values() -> None:
     assert cfg.paths.results_dir == "results"
 
 
+def test_loads_the_phase_1_noise_and_eval_parameters() -> None:
+    cfg = load_config()
+
+    assert cfg.sensors.min_distance_cm > 0
+    assert cfg.sensors.load_cell_sigma_kg >= 0
+    assert cfg.sensors.load_cell_bias_max_kg >= 0
+    assert cfg.bin.density_kg_per_pct > 0
+    assert 0 <= cfg.bin.density_cv < 1
+    assert cfg.fusion_eval.n_bins >= 1
+    assert cfg.fusion_eval.days >= 1
+    assert cfg.fusion_eval.bootstrap_resamples >= 1
+
+
+def test_density_cv_must_be_a_fraction() -> None:
+    with pytest.raises(ConfigError, match="density_cv"):
+        load_config(overrides={"bin": {"density_cv": 1.0}})
+    with pytest.raises(ConfigError, match="density_cv"):
+        load_config(overrides={"bin": {"density_cv": -0.1}})
+
+
+def test_density_cv_zero_is_allowed() -> None:
+    """The sensitivity run needs it: it is the load cell's blind spot, not an error."""
+    assert load_config(overrides={"bin": {"density_cv": 0.0}}).bin.density_cv == 0.0
+
+
+def test_negative_load_cell_noise_is_rejected() -> None:
+    with pytest.raises(ConfigError, match="load_cell_sigma_kg"):
+        load_config(overrides={"sensors": {"load_cell_sigma_kg": -1.0}})
+
+
+def test_bootstrap_resamples_must_be_positive() -> None:
+    with pytest.raises(ConfigError, match="bootstrap_resamples"):
+        load_config(overrides={"fusion_eval": {"bootstrap_resamples": 0}})
+
+
 def test_weight_threshold_is_alpha_times_w_max() -> None:
     cfg = load_config()
     assert cfg.bin.weight_threshold_kg == pytest.approx(cfg.bin.alpha * cfg.bin.w_max_kg)
