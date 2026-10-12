@@ -153,6 +153,83 @@ def test_config_is_frozen() -> None:
         cfg.bin.alpha = 0.1  # type: ignore[misc]
 
 
+def test_loads_the_phase_2_benchmark_parameters() -> None:
+    cfg = load_config()
+
+    assert cfg.bin.max_accumulated_weight_kg > 0
+    assert 0 <= cfg.sensors.stuck_bin_fraction <= 1
+    assert cfg.benchmark.fixed_schedule_days >= 1
+    assert cfg.benchmark.n_seeds >= 1
+    assert cfg.benchmark.fault_fractions == (0.0, 0.02, 0.10)
+
+
+def test_weight_cap_must_leave_the_load_cell_able_to_flag() -> None:
+    """Below alpha * W_max, an uncollected bin could never raise the overload flag."""
+    with pytest.raises(ConfigError, match="max_accumulated_weight_kg"):
+        load_config(overrides={"bin": {"max_accumulated_weight_kg": 1.0}})
+
+
+def test_stuck_bin_fraction_must_be_a_fraction() -> None:
+    with pytest.raises(ConfigError, match="stuck_bin_fraction"):
+        load_config(overrides={"sensors": {"stuck_bin_fraction": 1.5}})
+    with pytest.raises(ConfigError, match="stuck_bin_fraction"):
+        load_config(overrides={"sensors": {"stuck_bin_fraction": -0.1}})
+
+
+def test_stuck_bin_fraction_endpoints_are_allowed() -> None:
+    """The fault sweep runs 0.0, and a 1.0 all-faulted city is a legitimate stress case."""
+    assert load_config(overrides={"sensors": {"stuck_bin_fraction": 0.0}}) is not None
+    assert load_config(overrides={"sensors": {"stuck_bin_fraction": 1.0}}) is not None
+
+
+# --- list-of-float coercion (benchmark.fault_fractions) --------------------------------------
+
+
+def test_fault_fractions_accepts_a_list_of_numbers() -> None:
+    cfg = load_config(overrides={"benchmark": {"fault_fractions": [0.0, 0.02, 0.10]}})
+    assert cfg.benchmark.fault_fractions == (0.0, 0.02, 0.10)
+    assert all(isinstance(value, float) for value in cfg.benchmark.fault_fractions)
+
+
+def test_fault_fractions_widens_yaml_ints_to_floats() -> None:
+    """YAML writes 0 and 1 as ints where we declare floats."""
+    cfg = load_config(overrides={"benchmark": {"fault_fractions": [0, 1]}})
+    assert cfg.benchmark.fault_fractions == (0.0, 1.0)
+
+
+def test_fault_fractions_rejects_a_bare_scalar() -> None:
+    """A typo'd single value must be an error, not a silent one-element sweep."""
+    with pytest.raises(ConfigError, match="fault_fractions"):
+        load_config(overrides={"benchmark": {"fault_fractions": 0.02}})
+
+
+def test_fault_fractions_rejects_a_string() -> None:
+    """A string is iterable, so it must be rejected explicitly rather than char by char."""
+    with pytest.raises(ConfigError, match="fault_fractions"):
+        load_config(overrides={"benchmark": {"fault_fractions": "0.02"}})
+
+
+def test_fault_fractions_rejects_a_non_number_element() -> None:
+    with pytest.raises(ConfigError, match=r"fault_fractions\[1\]"):
+        load_config(overrides={"benchmark": {"fault_fractions": [0.0, "x"]}})
+
+
+def test_fault_fractions_rejects_a_bool_element() -> None:
+    """bool is an int subclass, so it needs the same explicit rejection as elsewhere."""
+    with pytest.raises(ConfigError, match=r"fault_fractions\[1\]"):
+        load_config(overrides={"benchmark": {"fault_fractions": [0.0, True]}})
+
+
+def test_fault_fractions_rejects_an_empty_list() -> None:
+    with pytest.raises(ConfigError, match="at least one value"):
+        load_config(overrides={"benchmark": {"fault_fractions": []}})
+
+
+def test_fault_fractions_values_must_be_fractions() -> None:
+    with pytest.raises(ConfigError, match="fault_fractions"):
+        load_config(overrides={"benchmark": {"fault_fractions": [0.0, 1.5]}})
+
+
 def test_paths_resolve_under_the_repo_root(repo_root: Path) -> None:
     cfg = load_config()
     assert cfg.paths.resolve("results_dir") == repo_root / "results"

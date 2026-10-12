@@ -28,7 +28,6 @@ Honesty notes that belong with the numbers, not just in the docs:
 
 from __future__ import annotations
 
-import hashlib
 import random
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -46,6 +45,10 @@ from smartwaste.noise import (
     SensorArray,
 )
 
+# Imported with an explicit `as` re-export: Phase 2's city benchmark shares this helper, and
+# the Phase 1 import path plus the values pinned in tests/test_fusion_eval.py must not move.
+from smartwaste.seeds import child_seed as child_seed
+
 #: Scenario fairness labels, so a reader can tell a measurement from a demonstration.
 FAIRNESS_CONTROL = "control"
 FAIRNESS_FAIR = "fair test"
@@ -53,17 +56,6 @@ FAIRNESS_FAVORS_FUSION = "favors fusion by construction"
 FAIRNESS_LABELS = (FAIRNESS_CONTROL, FAIRNESS_FAIR, FAIRNESS_FAVORS_FUSION)
 
 CI_LEVEL = 0.95
-
-
-def child_seed(seed: int, label: str) -> int:
-    """Derive a reproducible sub-seed from a master seed and a label.
-
-    Uses sha256 rather than :func:`hash`, because ``hash()`` of a ``str`` is salted per process
-    (``PYTHONHASHSEED``). With ``hash()`` the same command and seed would silently produce
-    different numbers in different runs, which is exactly what this project promises not to do.
-    """
-    digest = hashlib.sha256(f"{seed}:{label}".encode()).digest()
-    return int.from_bytes(digest[:8], "big")
 
 
 @dataclass(frozen=True)

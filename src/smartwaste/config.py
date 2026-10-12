@@ -39,6 +39,7 @@ class BinConfig:
     red_threshold_pct: float
     density_kg_per_pct: float
     density_cv: float
+    max_accumulated_weight_kg: float
 
     def validate(self) -> None:
         if self.height_cm <= 0:
@@ -56,6 +57,14 @@ class BinConfig:
             raise ConfigError(f"bin.density_kg_per_pct must be > 0, got {self.density_kg_per_pct}")
         if not 0 <= self.density_cv < 1:
             raise ConfigError(f"bin.density_cv must be in [0, 1), got {self.density_cv}")
+        # A missed bin keeps accruing weight up to this cap. It must sit above the overload
+        # threshold alpha * W_max, or an uncollected bin could never raise the load-cell flag
+        # and the fusion strategies would never recover it.
+        if self.max_accumulated_weight_kg < self.weight_threshold_kg:
+            raise ConfigError(
+                "bin.max_accumulated_weight_kg must be >= alpha * w_max_kg "
+                f"({self.weight_threshold_kg}), got {self.max_accumulated_weight_kg}"
+            )
 
     @property
     def weight_threshold_kg(self) -> float:
@@ -75,8 +84,13 @@ class SensorsConfig:
     min_distance_cm: float
     load_cell_sigma_kg: float
     load_cell_bias_max_kg: float
+    stuck_bin_fraction: float
 
     def validate(self) -> None:
+        if not 0 <= self.stuck_bin_fraction <= 1:
+            raise ConfigError(
+                f"sensors.stuck_bin_fraction must be in [0, 1], got {self.stuck_bin_fraction}"
+            )
         if self.n_ultrasonic < 1:
             raise ConfigError(f"sensors.n_ultrasonic must be >= 1, got {self.n_ultrasonic}")
         if self.noise_sigma_cm < 0:
@@ -204,6 +218,30 @@ class FusionEvalConfig:
 
 
 @dataclass(frozen=True)
+class BenchmarkConfig:
+    """Size and shape of the Phase 2 city benchmark."""
+
+    fixed_schedule_days: int
+    n_seeds: int
+    fault_fractions: tuple[float, ...]
+
+    def validate(self) -> None:
+        if self.fixed_schedule_days < 1:
+            raise ConfigError(
+                f"benchmark.fixed_schedule_days must be >= 1, got {self.fixed_schedule_days}"
+            )
+        if self.n_seeds < 1:
+            raise ConfigError(f"benchmark.n_seeds must be >= 1, got {self.n_seeds}")
+        if not self.fault_fractions:
+            raise ConfigError("benchmark.fault_fractions must list at least one value")
+        for value in self.fault_fractions:
+            if not 0 <= value <= 1:
+                raise ConfigError(
+                    f"benchmark.fault_fractions values must be in [0, 1], got {value}"
+                )
+
+
+@dataclass(frozen=True)
 class PathsConfig:
     """Output and cache directories, relative to the repo root unless absolute."""
 
@@ -234,6 +272,7 @@ class Config:
     cost: CostConfig
     routing: RoutingConfig
     fusion_eval: FusionEvalConfig
+    benchmark: BenchmarkConfig
     paths: PathsConfig
 
     def validate(self) -> None:
@@ -245,6 +284,7 @@ class Config:
         self.cost.validate()
         self.routing.validate()
         self.fusion_eval.validate()
+        self.benchmark.validate()
         self.paths.validate()
 
 
@@ -281,6 +321,7 @@ def load_config(
         cost=_section(raw, "cost", CostConfig),
         routing=_section(raw, "routing", RoutingConfig),
         fusion_eval=_section(raw, "fusion_eval", FusionEvalConfig),
+        benchmark=_section(raw, "benchmark", BenchmarkConfig),
         paths=_section(raw, "paths", PathsConfig),
     )
     cfg.validate()
@@ -345,12 +386,26 @@ def _section(raw: Mapping[str, Any], name: str, cls: type[S]) -> S:
     return cls(**values)
 
 
-def _coerce_annotated(value: object, annotation: str, where: str) -> int | float | str:
+def _coerce_annotated(
+    value: object, annotation: str, where: str
+) -> int | float | str | tuple[float, ...]:
     """Coerce one YAML value according to its dataclass field annotation.
 
     YAML writes ``30`` where we declare a float, so ints are widened; bools are never accepted
     as numbers, and anything else wrong-typed is an error naming the key.
     """
+    if annotation == "tuple[float, ...]":
+        # A YAML sequence of numbers, e.g. benchmark.fault_fractions: [0.0, 0.02, 0.10].
+        # A bare scalar is rejected rather than wrapped, so a typo'd `0.02` is an error
+        # instead of a silently one-element sweep.
+        if isinstance(value, str) or not isinstance(value, list | tuple):
+            raise _wrong_type(value, "a list of numbers", where)
+        items: list[float] = []
+        for position, item in enumerate(value):
+            if isinstance(item, bool) or not isinstance(item, int | float):
+                raise _wrong_type(item, "float", f"{where}[{position}]")
+            items.append(float(item))
+        return tuple(items)
     if annotation == "int":
         if isinstance(value, bool) or not isinstance(value, int):
             raise _wrong_type(value, "int", where)

@@ -22,7 +22,7 @@ Nothing here can read ground truth by accident: a classifier is handed a
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -56,6 +56,28 @@ def mean_distance(distances: Sequence[float]) -> float:
     if not distances:
         raise ValueError("mean_distance needs at least one distance")
     return sum(distances) / len(distances)
+
+
+def median_distance(distances: Sequence[float]) -> float:
+    """The median of the ultrasonic distances -- our extension, NOT the paper's rule.
+
+    The paper specifies a plain arithmetic mean. Phase 1 measured why that is fragile: with one
+    sensor hard-latched, the mean was 20.85 pp *worse* than the single centre sensor, because
+    averaging cannot discard a dead reading. A median of three survives one bad sensor outright.
+
+    The trade-off is real and runs the other way when the hardware is healthy: with three good
+    sensors the median of 3 is a noisier estimator of the surface height than the mean (it throws
+    away two readings' worth of averaging). So this is expected to lose slightly at a zero fault
+    rate and win as faults rise; Phase 2 reports both rather than picking the flattering one.
+    """
+    if not distances:
+        raise ValueError("median_distance needs at least one distance")
+    ordered = sorted(distances)
+    n = len(ordered)
+    middle = n // 2
+    if n % 2 == 1:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
 def fill_percent(d_bar: float, height_cm: float) -> float:
@@ -95,6 +117,7 @@ def fuse(
     *,
     use_load_cell: bool,
     sensor_indices: Sequence[int] | None = None,
+    reducer: Callable[[Sequence[float]], float] = mean_distance,
 ) -> FusionResult:
     """Run the paper's rule over one sensor reading.
 
@@ -106,12 +129,16 @@ def fuse(
             paper's full fusion.
         sensor_indices: which sensors this method reads, or all of them when None. The
             single-center-sensor method passes ``(CENTER_INDEX,)``.
+        reducer: how the chosen distances collapse to ``d_bar``. Defaults to
+            :func:`mean_distance`, which is the paper's published rule, so every existing caller
+            keeps its exact behaviour. Phase 2's median-fusion extension passes
+            :func:`median_distance` here and changes nothing else.
     """
     if sensor_indices is None:
         distances: Sequence[float] = reading.distances_cm
     else:
         distances = [reading.distances_cm[i] for i in sensor_indices]
-    fv = fill_percent(mean_distance(distances), bin_cfg.height_cm)
+    fv = fill_percent(reducer(distances), bin_cfg.height_cm)
     overloaded = use_load_cell and is_overloaded(reading.weight_kg, bin_cfg.w_max_kg, bin_cfg.alpha)
     state = classify(fv, overloaded, bin_cfg.yellow_threshold_pct, bin_cfg.red_threshold_pct)
     return FusionResult(fill_pct=fv, overloaded=overloaded, state=state)

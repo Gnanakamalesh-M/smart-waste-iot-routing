@@ -17,6 +17,9 @@ bin:
   red_threshold_pct: 80.0       # paper: RED when Fv >= 80 or load-cell flag is 1
   density_kg_per_pct: 0.5       # chosen: kg of waste per 1% of bin volume (= w_max_kg / 100)
   density_cv: 0.3               # chosen: per-bin spread of that density; 0 makes the load cell useless
+  max_accumulated_weight_kg: 100.0  # invented, uncited: physical cap on an uncollected bin's weight.
+                                #   Must be >= alpha * w_max_kg or a missed bin could never raise
+                                #   the load-cell flag. No field data; see docs/ASSUMPTIONS.md.
 
 sensors:
   n_ultrasonic: 3               # paper: 3 ultrasonic sensors (left / center / right)
@@ -27,6 +30,9 @@ sensors:
   min_distance_cm: 2.0          # chosen: HC-SR04 minimum range; readings clamp here on a full bin
   load_cell_sigma_kg: 0.3       # chosen: Gaussian load-cell noise (paper reports none)
   load_cell_bias_max_kg: 0.5    # chosen: max absolute constant load-cell miscalibration
+  stuck_bin_fraction: 0.02      # invented, uncited: fraction of city bins with one stuck sensor.
+                                #   Which of the 3 sensors is stuck is drawn uniformly, so neither
+                                #   the mean nor the median fusion rule is favoured by construction.
 
 fusion_eval:
   n_bins: 200                   # chosen: independent bins simulated per noise scenario
@@ -57,7 +63,16 @@ routing:
   n_trucks_per_cluster: 1       # chosen: Phase 2 uses one truck per cluster; VRP relaxes this
   two_opt_max_iters: 1000       # chosen: iteration cap for the 2-opt TSP improvement pass
 
+benchmark:
+  fixed_schedule_days: 3        # chosen: N in strategy (b), "collect every bin every N days"
+  n_seeds: 5                    # chosen: seeds 42..46; reported as a RANGE over seeds, not a CI
+  fault_fractions: [0.0, 0.02, 0.10]
+                                # chosen: the stuck-sensor sweep. 0.0 = no faults, 0.02 matches
+                                #   sensors.stuck_bin_fraction, 0.10 is the sensitivity row. All
+                                #   three are reported so the mean-vs-median verdict does not rest
+                                #   on one invented number.
+
 paths:
-  data_dir: data                # inputs and generated datasets (gitignored)
+  data_dir: data              # inputs and generated datasets (gitignored)
   cache_dir: cache              # downloaded artifacts, e.g. OSMnx road graphs (gitignored)
   results_dir: results          # benchmark tables and figures (gitignored)
