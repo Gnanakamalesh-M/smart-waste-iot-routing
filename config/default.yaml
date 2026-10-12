@@ -1,0 +1,52 @@
+# ALL tunable assumptions for this project live here.
+#
+# STATUS: every value below is a PLACEHOLDER as of Phase 0. Nothing has been simulated,
+# measured or validated yet. Sources are marked as:
+#   paper   - stated in the IEEE paper we extend
+#   chosen  - picked by us because the paper does not state it
+#   derived - computed from other values
+# See docs/ASSUMPTIONS.md for the per-parameter record.
+
+seed: 42                        # chosen: one global seed; same command + same seed = same numbers
+
+bin:
+  height_cm: 100.0              # chosen: inner height H used in phi = 1 - d_bar / H
+  w_max_kg: 50.0                # chosen: bin weight capacity W_max
+  alpha: 0.85                   # chosen: paper defines W_th = alpha * W_max but never gives alpha
+  yellow_threshold_pct: 60.0    # paper: YELLOW when 60 <= Fv < 80 and load-cell flag is 0
+  red_threshold_pct: 80.0       # paper: RED when Fv >= 80 or load-cell flag is 1
+
+sensors:
+  n_ultrasonic: 3               # paper: 3 ultrasonic sensors (left / center / right)
+  noise_sigma_cm: 1.5           # chosen: Gaussian measurement noise per ultrasonic reading
+  bias_max_cm: 3.0              # chosen: max absolute constant per-sensor bias
+  stuck_probability: 0.01       # chosen: per-reading chance a sensor repeats its last value
+  uneven_fill_skew_cm: 10.0     # chosen: max lateral height difference across the 3 sensors
+
+sim:
+  n_bins: 5000                  # paper: 5000 bins in the city-scale simulation
+  days: 30                      # paper: 30-day horizon (the paper also says "three-month"; we use 30)
+  grid_km: 100.0                # paper: bins placed on a 100 x 100 km grid
+  daily_fill_mean_kg: 4.0       # chosen: mean of the daily increment dW_i(t)
+  daily_fill_sd_kg: 1.5         # chosen: standard deviation of the daily increment
+
+cost:
+  fuel_l_per_km: 0.35           # chosen: truck fuel consumption, the 'a' in F = a * D
+  fuel_cost_per_l: 95.0         # chosen: diesel price (INR per litre)
+  co2_kg_per_l: 2.68            # chosen: CO2 emitted per litre of diesel, the 'b' in E = b * D
+  maintenance_cost_per_km: 8.0  # chosen: maintenance cost per km (INR)
+  labor_cost_per_hr: 180.0      # chosen: crew cost per truck-hour (INR)
+  fixed_cost_per_day: 2000.0    # chosen: fixed cost per truck per day (INR)
+  truck_speed_kmph: 25.0        # chosen: average urban collection speed
+  service_time_min_per_bin: 3.0 # chosen: time spent emptying one bin
+  truck_capacity_kg: 8000.0     # chosen: payload capacity, used from Phase 4 (VRP)
+
+routing:
+  n_clusters: 20                # chosen: KMeans geographic clusters (one truck tour per cluster)
+  n_trucks_per_cluster: 1       # chosen: Phase 2 uses one truck per cluster; VRP relaxes this
+  two_opt_max_iters: 1000       # chosen: iteration cap for the 2-opt TSP improvement pass
+
+paths:
+  data_dir: data                # inputs and generated datasets (gitignored)
+  cache_dir: cache              # downloaded artifacts, e.g. OSMnx road graphs (gitignored)
+  results_dir: results          # benchmark tables and figures (gitignored)

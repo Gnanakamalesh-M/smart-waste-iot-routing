@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: python -m ruff check .
+      - run: python -m ruff format --check .
+
+  types:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: python -m mypy
+
+  tests:
+    name: pytest (${{ matrix.chunk }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk: [unit, sim, ml, routing]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - name: marker '${{ matrix.chunk }}' is registered
+        shell: bash
+        # pytest's --strict-markers rejects unregistered markers on tests, but NOT in a -m
+        # expression: a typo'd chunk name would just deselect everything and exit 5, which the
+        # next step tolerates. So fail loudly here if the marker is not declared in pyproject.
+        run: |
+          if ! python -m pytest --markers | grep -q "^@pytest\.mark\.${{ matrix.chunk }}:"; then
+            echo "marker '${{ matrix.chunk }}' is not registered in pyproject.toml"
+            exit 1
+          fi
+
+      - name: pytest -m ${{ matrix.chunk }}
+        shell: bash
+        # Exit code 5 means "no tests collected": a chunk whose phase has not landed yet.
+        # Every other non-zero code (1 = failures, 2 = collection error, 3 = internal,
+        # 4 = usage) still fails the job, so this tolerates emptiness without weakening tests.
+        run: |
+          set +e
+          python -m pytest -m "${{ matrix.chunk }}"
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            echo "no tests collected for marker '${{ matrix.chunk }}' yet"
+            exit 0
+          fi
+          exit "$code"
+
+  slow:
+    name: pytest (slow)
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - name: marker 'slow' is registered
+        shell: bash
+        run: |
+          if ! python -m pytest --markers | grep -q "^@pytest\.mark\.slow:"; then
+            echo "marker 'slow' is not registered in pyproject.toml"
+            exit 1
+          fi
+
+      - name: pytest -m slow
+        shell: bash
+        run: |
+          set +e
+          python -m pytest -m slow
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            echo "no tests collected for marker 'slow' yet"
+            exit 0
+          fi
+          exit "$code"

@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartwaste"
+version = "0.0.0"
+description = "Smart waste collection: IoT sensor fusion, forecasting and route optimization"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML>=6.0",
+]
+# Added in later phases; Phase 0 deliberately installs none of these.
+sim = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "matplotlib>=3.8",
+]
+ml = [
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+]
+routing = [
+    "ortools>=9.10",
+    "networkx>=3.3",
+    "osmnx>=1.9",
+]
+app = [
+    "streamlit>=1.37",
+    "plotly>=5.23",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "unit: fast, isolated tests with no simulation or model training",
+    "sim: bin / city simulation tests",
+    "ml: forecasting and anomaly-detection model tests",
+    "routing: clustering, TSP and VRP tests",
+    "slow: long-running tests, excluded from the default chunks",
+]

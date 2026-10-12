@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# Secrets: only .env.example is tracked
+.env
+.env.*
+!.env.example
+
+# Generated data, caches and results.
+# File-level patterns (not "data/") so the .gitkeep files stay tracked:
+# a directory-level ignore stops git descending and "!data/.gitkeep" could never re-include it.
+data/*
+!data/.gitkeep
+cache/*
+!cache/.gitkeep
+results/*
+!results/.gitkeep
+
+# OSMnx road-graph cache (Phase 4)
+osmnx_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
