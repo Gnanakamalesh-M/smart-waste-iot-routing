@@ -141,6 +141,199 @@ class SimConfig:
 
 
 @dataclass(frozen=True)
+class DemandConfig:
+    """Phase 3's waste arrival process. **Every value here is invented and uncited.**
+
+    The paper states only that daily increments are "random" -- no distribution, no
+    heterogeneity, no calendar. So area types, the weekday cycle and festival spikes are all
+    modelling choices of ours with no field data behind them. See
+    :mod:`smartwaste.demand` and docs/ASSUMPTIONS.md.
+    """
+
+    scenario: str
+    area_type_weights: tuple[float, ...]
+    area_mean_kg: tuple[float, ...]
+    cv: float
+    weekday_multipliers: tuple[float, ...]
+    festival_days_per_month: float
+    festival_multiplier: float
+
+    def validate(self) -> None:
+        # Imported lazily: smartwaste.demand imports this module, so a top-level import here
+        # would be a cycle.
+        from smartwaste.demand import DAYS_PER_WEEK, SCENARIOS
+
+        if self.scenario not in SCENARIOS:
+            raise ConfigError(f"demand.scenario must be one of {SCENARIOS}, got {self.scenario!r}")
+        if not self.area_type_weights:
+            raise ConfigError("demand.area_type_weights must list at least one value")
+        if len(self.area_type_weights) != len(self.area_mean_kg):
+            raise ConfigError(
+                "demand.area_type_weights and demand.area_mean_kg must have the same length, got "
+                f"{len(self.area_type_weights)} and {len(self.area_mean_kg)}"
+            )
+        if any(weight < 0 for weight in self.area_type_weights):
+            raise ConfigError(
+                f"demand.area_type_weights must all be >= 0, got {list(self.area_type_weights)}"
+            )
+        total = sum(self.area_type_weights)
+        if abs(total - 1.0) > 1e-6:
+            raise ConfigError(f"demand.area_type_weights must sum to 1.0, got {total}")
+        if any(mean < 0 for mean in self.area_mean_kg):
+            raise ConfigError(
+                f"demand.area_mean_kg must all be >= 0, got {list(self.area_mean_kg)}"
+            )
+        if self.cv < 0:
+            raise ConfigError(f"demand.cv must be >= 0, got {self.cv}")
+        if len(self.weekday_multipliers) != DAYS_PER_WEEK:
+            raise ConfigError(
+                f"demand.weekday_multipliers must have exactly {DAYS_PER_WEEK} entries "
+                f"(Mon..Sun), got {len(self.weekday_multipliers)}"
+            )
+        if any(multiplier < 0 for multiplier in self.weekday_multipliers):
+            raise ConfigError(
+                f"demand.weekday_multipliers must all be >= 0, got {list(self.weekday_multipliers)}"
+            )
+        if self.festival_days_per_month < 0:
+            raise ConfigError(
+                f"demand.festival_days_per_month must be >= 0, got {self.festival_days_per_month}"
+            )
+        if self.festival_multiplier < 0:
+            raise ConfigError(
+                f"demand.festival_multiplier must be >= 0, got {self.festival_multiplier}"
+            )
+
+
+@dataclass(frozen=True)
+class ForecastConfig:
+    """Phase 3 fill-level forecasting. **Every value here is invented and uncited.**"""
+
+    warmup_days: int
+    horizon_days: int
+    history_days: int
+    moving_average_window: int
+    backstop_days: tuple[float, ...]
+    gbm_max_iter: int
+    gbm_learning_rate: float
+    gbm_max_depth: int
+
+    def validate(self) -> None:
+        if self.warmup_days < 1:
+            raise ConfigError(f"forecast.warmup_days must be >= 1, got {self.warmup_days}")
+        if self.horizon_days < 1:
+            raise ConfigError(f"forecast.horizon_days must be >= 1, got {self.horizon_days}")
+        if self.history_days < 1:
+            raise ConfigError(f"forecast.history_days must be >= 1, got {self.history_days}")
+        if self.history_days > self.warmup_days:
+            raise ConfigError(
+                "forecast.history_days must be <= forecast.warmup_days, or no training row "
+                f"could ever be built: got {self.history_days} > {self.warmup_days}"
+            )
+        if self.moving_average_window < 1:
+            raise ConfigError(
+                f"forecast.moving_average_window must be >= 1, got {self.moving_average_window}"
+            )
+        if not self.backstop_days:
+            raise ConfigError("forecast.backstop_days must list at least one value")
+        for value in self.backstop_days:
+            if value < 1 or value != int(value):
+                raise ConfigError(
+                    f"forecast.backstop_days values must be whole numbers >= 1, got {value}"
+                )
+        if self.gbm_max_iter < 1:
+            raise ConfigError(f"forecast.gbm_max_iter must be >= 1, got {self.gbm_max_iter}")
+        if self.gbm_learning_rate <= 0:
+            raise ConfigError(
+                f"forecast.gbm_learning_rate must be > 0, got {self.gbm_learning_rate}"
+            )
+        if self.gbm_max_depth < 1:
+            raise ConfigError(f"forecast.gbm_max_depth must be >= 1, got {self.gbm_max_depth}")
+
+    @property
+    def backstops(self) -> tuple[int, ...]:
+        """``backstop_days`` as ints, which is how the schedules actually use them."""
+        return tuple(int(value) for value in self.backstop_days)
+
+
+@dataclass(frozen=True)
+class AnomalyConfig:
+    """Phase 3 sensor anomaly detection. **Every value here is invented and uncited.**
+
+    ``validation_seed_offset`` exists so detector thresholds are chosen on a *different* city
+    from the one they are scored on. Tuning a threshold on the scoring seed's planted labels
+    would be the same leakage this project forbids everywhere else.
+    """
+
+    n_bins: int
+    days: int
+    fault_bin_fraction: float
+    window_days: int
+    validation_seed_offset: int
+    min_fault_days: int
+    max_fault_days: int
+    drift_cm_per_day: float
+    noise_burst_sigma_cm: float
+    stuck_tolerance_cm: float
+    disagreement_cm: float
+    contamination: float
+    n_estimators: int
+
+    def validate(self) -> None:
+        # Dataset size first: the duration checks below are stated relative to `days`, so a bad
+        # `days` must be reported as such rather than surfacing as a confusing duration error.
+        if self.n_bins < 1:
+            raise ConfigError(f"anomaly.n_bins must be >= 1, got {self.n_bins}")
+        if self.days < 1:
+            raise ConfigError(f"anomaly.days must be >= 1, got {self.days}")
+        if not 1 <= self.min_fault_days <= self.max_fault_days:
+            raise ConfigError(
+                "anomaly fault durations must satisfy 1 <= min_fault_days <= max_fault_days, got "
+                f"min={self.min_fault_days}, max={self.max_fault_days}"
+            )
+        if self.max_fault_days > self.days:
+            raise ConfigError(
+                f"anomaly.max_fault_days must be <= anomaly.days, got "
+                f"{self.max_fault_days} > {self.days}"
+            )
+        if self.drift_cm_per_day < 0:
+            raise ConfigError(f"anomaly.drift_cm_per_day must be >= 0, got {self.drift_cm_per_day}")
+        if self.noise_burst_sigma_cm < 0:
+            raise ConfigError(
+                f"anomaly.noise_burst_sigma_cm must be >= 0, got {self.noise_burst_sigma_cm}"
+            )
+        if not 0 <= self.fault_bin_fraction <= 1:
+            raise ConfigError(
+                f"anomaly.fault_bin_fraction must be in [0, 1], got {self.fault_bin_fraction}"
+            )
+        if self.window_days < 2:
+            raise ConfigError(
+                f"anomaly.window_days must be >= 2 (a variance needs two points), got "
+                f"{self.window_days}"
+            )
+        if self.window_days > self.days:
+            raise ConfigError(
+                f"anomaly.window_days must be <= anomaly.days, got {self.window_days} > {self.days}"
+            )
+        if self.validation_seed_offset == 0:
+            raise ConfigError(
+                "anomaly.validation_seed_offset must be non-zero: thresholds must be chosen on a "
+                "different city from the one they are scored on"
+            )
+        if self.stuck_tolerance_cm < 0:
+            raise ConfigError(
+                f"anomaly.stuck_tolerance_cm must be >= 0, got {self.stuck_tolerance_cm}"
+            )
+        if self.disagreement_cm < 0:
+            raise ConfigError(f"anomaly.disagreement_cm must be >= 0, got {self.disagreement_cm}")
+        if not 0 < self.contamination < 0.5:
+            raise ConfigError(
+                f"anomaly.contamination must be in (0, 0.5), got {self.contamination}"
+            )
+        if self.n_estimators < 1:
+            raise ConfigError(f"anomaly.n_estimators must be >= 1, got {self.n_estimators}")
+
+
+@dataclass(frozen=True)
 class CostConfig:
     """Fuel, CO2, labor and fixed-cost rates for the economic model."""
 
@@ -269,6 +462,9 @@ class Config:
     bin: BinConfig
     sensors: SensorsConfig
     sim: SimConfig
+    demand: DemandConfig
+    forecast: ForecastConfig
+    anomaly: AnomalyConfig
     cost: CostConfig
     routing: RoutingConfig
     fusion_eval: FusionEvalConfig
@@ -281,6 +477,9 @@ class Config:
         self.bin.validate()
         self.sensors.validate()
         self.sim.validate()
+        self.demand.validate()
+        self.forecast.validate()
+        self.anomaly.validate()
         self.cost.validate()
         self.routing.validate()
         self.fusion_eval.validate()
@@ -318,6 +517,9 @@ def load_config(
         bin=_section(raw, "bin", BinConfig),
         sensors=_section(raw, "sensors", SensorsConfig),
         sim=_section(raw, "sim", SimConfig),
+        demand=_section(raw, "demand", DemandConfig),
+        forecast=_section(raw, "forecast", ForecastConfig),
+        anomaly=_section(raw, "anomaly", AnomalyConfig),
         cost=_section(raw, "cost", CostConfig),
         routing=_section(raw, "routing", RoutingConfig),
         fusion_eval=_section(raw, "fusion_eval", FusionEvalConfig),

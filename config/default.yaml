@@ -47,6 +47,74 @@ sim:
   daily_fill_mean_kg: 4.0       # chosen: mean of the daily increment dW_i(t)
   daily_fill_sd_kg: 1.5         # chosen: standard deviation of the daily increment
 
+demand:
+  # PHASE 3. Every value in this section is INVENTED AND UNCITED. The paper says only that daily
+  # increments are "random" - no distribution, no heterogeneity, no calendar. Nothing here has a
+  # citation or a measurement behind it, and nothing here was tuned after seeing a result.
+  #
+  # Phase 2 found a plain every-3-days calendar matched the paper's sensors because its arrivals
+  # were smooth i.i.d. Gaussian. This section makes demand actually vary, so that finding can be
+  # retested. Results depending on it hold ON THIS INVENTED DEMAND ONLY.
+  scenario: heterogeneous       # invented: "smooth" reproduces Phase 2 exactly; "heterogeneous"
+                                #   is the Phase 3 process. The benchmark reports BOTH.
+  area_type_weights: [0.2, 0.5, 0.3]
+                                # invented, uncited: share of bins that are market / residential
+                                #   / apartment. Must sum to 1.0.
+  area_mean_kg: [6.0, 2.0, 3.4]
+                                # invented, uncited: mean daily arrival per area type.
+                                #   DELIBERATELY SCALED so the long-run mean per bin lands near
+                                #   sim.daily_fill_mean_kg (4.0) AFTER the weekday mean (1.1143)
+                                #   and the festival factor (1.1000) are applied: 3.22 * 1.2257 =
+                                #   3.947, i.e. -1.3%. Without this the heterogeneous city would
+                                #   simply make more waste than the smooth one and every Phase 3
+                                #   number would improve for the wrong reason. tests/test_demand.py
+                                #   MEASURES the realised mean and pins it within 5%.
+  cv: 0.35                      # invented, uncited: per-bin-day coefficient of variation.
+                                #   sd = mean * cv, so spread scales with the mean (a market bin
+                                #   is noisy in kg, a residential one is not).
+  weekday_multipliers: [1.0, 1.0, 1.0, 1.0, 1.15, 1.4, 1.25]
+                                # invented, uncited: Mon..Sun. Day 0 of the horizon is a Monday.
+  festival_days_per_month: 2    # invented, uncited: quoted per 30 days.
+  festival_multiplier: 2.5      # invented, uncited: arrival multiplier on a festival day.
+
+forecast:
+  # PHASE 3. Every value in this section is INVENTED AND UNCITED, and none was adjusted after
+  # seeing a model's score. In particular warmup_days stays at 14 even though that gives the
+  # gradient-boosting model very little seasonality to learn from - that is reported as a
+  # limitation, not tuned away.
+  warmup_days: 14               # invented, uncited: days 0..13 run the backstop schedule only and
+                                #   log noisy estimates; the model is fitted once at day 14 and
+                                #   frozen. This is the TIME-BASED split - never a random one.
+  horizon_days: 3               # invented, uncited: how many days ahead a forecast looks.
+  history_days: 5               # invented, uncited: lags of Fv-hat and weight used as features.
+                                #   Must be <= warmup_days or no training row could be built.
+  moving_average_window: 3      # invented, uncited: window for the moving-average BASELINE.
+  backstop_days: [3.0, 7.0]     # invented, uncited: the "next scheduled visit" each
+                                #   forecast-driven strategy falls back on. Both are run, each
+                                #   compared against the sensor-free calendar of the SAME period,
+                                #   so a win cannot just be a shorter schedule.
+  gbm_max_iter: 200             # invented, uncited: HistGradientBoostingRegressor n iterations.
+  gbm_learning_rate: 0.1        # invented, uncited.
+  gbm_max_depth: 4              # invented, uncited.
+
+anomaly:
+  # PHASE 3. Every value in this section is INVENTED AND UNCITED.
+  n_bins: 400                   # invented, uncited: bins in the planted-fault dataset.
+  days: 60                      # invented, uncited: days per bin.
+  fault_bin_fraction: 0.15      # invented, uncited: share of bins given a planted fault.
+  window_days: 5                # invented, uncited: rolling window the detectors score over.
+  validation_seed_offset: 1     # invented: thresholds are chosen on seed+offset and applied
+                                #   unchanged to the scoring seed. Choosing them on the scoring
+                                #   seed's planted labels would be leakage.
+  min_fault_days: 6             # invented, uncited: shortest planted fault episode.
+  max_fault_days: 20            # invented, uncited: longest planted fault episode.
+  drift_cm_per_day: 1.2         # invented, uncited: cm per day a drifting sensor wanders.
+  noise_burst_sigma_cm: 12.0    # invented, uncited: extra Gaussian sigma during a noise burst.
+  stuck_tolerance_cm: 0.05      # invented, uncited: rule baseline's "no variance" tolerance.
+  disagreement_cm: 25.0         # invented, uncited: rule baseline's 3-sensor disagreement limit.
+  contamination: 0.15           # invented, uncited: IsolationForest expected outlier share.
+  n_estimators: 200             # invented, uncited: IsolationForest trees.
+
 cost:
   fuel_l_per_km: 0.35           # chosen: truck fuel consumption, the 'a' in F = a * D
   fuel_cost_per_l: 95.0         # chosen: diesel price (INR per litre)

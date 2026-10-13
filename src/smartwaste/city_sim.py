@@ -35,10 +35,16 @@ bin's weight cannot grow without bound; it is an invented, uncited number.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from smartwaste.config import Config
 from smartwaste.cost import TruckDay
+from smartwaste.demand import (
+    SCENARIO_SMOOTH,
+    DemandCalendar,
+    build_calendar,
+    generate_increments,
+)
 from smartwaste.fusion import BinState, truth_state
 from smartwaste.noise import (
     NO_STUCK_SENSOR,
@@ -50,7 +56,7 @@ from smartwaste.noise import (
 from smartwaste.routing.cluster import ClusterResult
 from smartwaste.routing.tsp import Point, RouteCache
 from smartwaste.seeds import child_seed
-from smartwaste.strategies import Strategy
+from smartwaste.strategies import RunContext, Strategy
 
 #: True fill is a percentage, so 100 is full. At or above this the bin is overflowing.
 FULL_PCT = 100.0
@@ -71,6 +77,13 @@ class CityLayout:
     #: ``increments[bin][day]`` kg of waste arriving. Pre-generated, decision-independent.
     increments: tuple[tuple[float, ...], ...]
     depot: Point
+    #: Area types, weekdays and festival days. Under the ``"smooth"`` scenario this is neutral
+    #: (one area type, no festivals), which is what keeps Phase 2's numbers untouched.
+    calendar: DemandCalendar
+
+    @property
+    def scenario(self) -> str:
+        return self.calendar.scenario
 
     @property
     def n_bins(self) -> int:
@@ -92,8 +105,14 @@ def build_layout(
     n_bins: int,
     days: int,
     stuck_bin_fraction: float,
+    scenario: str = SCENARIO_SMOOTH,
 ) -> CityLayout:
     """Generate the city. Nothing here depends on any strategy's behaviour.
+
+    ``scenario`` selects the waste arrival process and **defaults to ``"smooth"``**, which is
+    Phase 2's process bit for bit (see :mod:`smartwaste.demand`). The default is deliberate: every
+    Phase 2 caller and test omits the argument and must keep getting Phase 2's exact numbers.
+    Phase 3's runner passes ``cfg.demand.scenario`` explicitly.
 
     The depot is the single central depot of the paper's routing model: the middle of the grid.
 
@@ -134,20 +153,20 @@ def build_layout(
         which = fault_rng.randrange(cfg.sensors.n_ultrasonic)
         stuck.append(which if faulted else NO_STUCK_SENSOR)
 
-    mean_kg = cfg.sim.daily_fill_mean_kg
-    sd_kg = cfg.sim.daily_fill_sd_kg
-    increments: list[tuple[float, ...]] = []
-    for bin_index in range(n_bins):
-        # One stream per bin, so the arrivals of bin 7 never depend on how many bins precede it.
-        fill_rng = random.Random(child_seed(seed, f"fill:{bin_index}"))
-        increments.append(tuple(max(0.0, fill_rng.gauss(mean_kg, sd_kg)) for _ in range(days)))
+    # One stream per bin, so the arrivals of bin 7 never depend on how many bins precede it.
+    # Both the smooth and heterogeneous processes live in smartwaste.demand.
+    calendar = build_calendar(cfg, seed, n_bins=n_bins, days=days, scenario=scenario)
+    increments = generate_increments(
+        cfg, seed, n_bins=n_bins, days=days, scenario=scenario, calendar=calendar
+    )
 
     return CityLayout(
         locations=locations,
         kg_per_pct=kg_per_pct,
         stuck_sensor=tuple(stuck),
-        increments=tuple(increments),
+        increments=increments,
         depot=(grid / 2.0, grid / 2.0),
+        calendar=calendar,
     )
 
 
@@ -207,6 +226,30 @@ class OutcomeCounters:
     true_red_bin_days: int = 0
 
 
+@dataclass
+class ScoringWindow:
+    """A second set of counters covering only days ``>= start_day``.
+
+    Phase 3 needs this because the forecast-driven strategies spend days 0..13 on their backstop
+    schedule while the model is still warming up. Scoring them over all 30 days would credit the
+    forecaster with 14 days it had no part in, so every Phase 3 headline claim is made on the
+    post-warm-up window instead -- and **every** strategy, including the calendars and the
+    paper's fusion, is scored on that identical window.
+
+    The full-horizon :class:`OutcomeCounters` are still accumulated unchanged alongside this, so
+    Phase 2's numbers remain directly comparable.
+    """
+
+    start_day: int
+    counters: OutcomeCounters = field(default_factory=OutcomeCounters)
+    #: Window-local "has this bin overflowed yet", so ``overflowed_bins`` counts bins that
+    #: overflowed *inside the window* rather than inheriting warm-up overflows.
+    ever_overflowed: list[bool] = field(default_factory=list)
+
+    def covers(self, day: int) -> bool:
+        return day >= self.start_day
+
+
 def step_day(
     cfg: Config,
     layout: CityLayout,
@@ -214,15 +257,26 @@ def step_day(
     was_overflowing: list[bool],
     ever_overflowed: list[bool],
     day: int,
+    *,
+    window: ScoringWindow | None = None,
 ) -> tuple[list[float], OutcomeCounters]:
     """Advance every bin by one day's waste arrivals and measure overflow.
 
     Returns the day's true fill percentages and the overflow counters for that day only. Called
     *before* any collection, so "the true fill reached 100% before collection" is what is counted.
+
+    ``window``, when given, accumulates the same measurements a second time for days inside the
+    scoring window. It is keyword-only and optional so that every Phase 2 caller -- which passes
+    six positional arguments and expects a 2-tuple back -- is completely unaffected.
     """
     counters = OutcomeCounters()
     fills: list[float] = []
     cap = cfg.bin.max_accumulated_weight_kg
+
+    # Bound once per day rather than re-tested per bin: inside the window these are the window's
+    # counters, outside it they are None and every window update is skipped.
+    scored = window.counters if window is not None and window.covers(day) else None
+    window_ever = window.ever_overflowed if window is not None else []
 
     for i in range(layout.n_bins):
         # Weight is capped: an abandoned bin must not accumulate without bound. The cap sits
@@ -240,10 +294,20 @@ def step_day(
             if not ever_overflowed[i]:
                 ever_overflowed[i] = True
                 counters.overflowed_bins += 1
+
+            if scored is not None:
+                scored.overflow_bin_days += 1
+                if not was_overflowing[i]:
+                    scored.overflow_events += 1
+                if not window_ever[i]:
+                    window_ever[i] = True
+                    scored.overflowed_bins += 1
         was_overflowing[i] = overflowing
 
         if truth_state(fill, weights[i], cfg.bin) is BinState.RED:
             counters.true_red_bin_days += 1
+            if scored is not None:
+                scored.true_red_bin_days += 1
 
     return fills, counters
 
@@ -258,6 +322,11 @@ class StrategyRun:
     counters: OutcomeCounters
     route_cache_hits: int
     route_cache_misses: int
+    #: Counters and truck-days restricted to the scoring window, or ``None`` when no window was
+    #: requested. Phase 2 callers never ask for one, so they see exactly what they always did.
+    window_counters: OutcomeCounters | None = None
+    window_truck_days: tuple[TruckDay, ...] = ()
+    window_start_day: int = 0
 
 
 def run_strategy(
@@ -266,6 +335,8 @@ def run_strategy(
     clusters: ClusterResult,
     strategy: Strategy,
     seed: int,
+    *,
+    window_start_day: int | None = None,
 ) -> StrategyRun:
     """Simulate the whole horizon under one strategy, routing its choices each day.
 
@@ -280,6 +351,19 @@ def run_strategy(
     arrays = build_sensor_arrays(cfg, layout, seed)
     cache = RouteCache(layout.depot, layout.locations, cfg.routing.two_opt_max_iters)
 
+    # Hand the strategy the city's non-secret structure once, before day 0. Area type, weekday
+    # and festival flag are operational facts a real utility knows from its own records -- they
+    # are NOT ground truth about fill, and the context carries no fill or weight at all.
+    strategy.begin_run(RunContext(calendar=layout.calendar, bin_cfg=cfg.bin, n_bins=layout.n_bins))
+
+    window: ScoringWindow | None = None
+    if window_start_day is not None:
+        window = ScoringWindow(
+            start_day=window_start_day,
+            ever_overflowed=[False] * layout.n_bins,
+        )
+    window_truck_days: list[TruckDay] = []
+
     # Cluster membership never changes, so invert the labels once rather than per day.
     members: list[list[int]] = [[] for _ in range(clusters.n_clusters)]
     for bin_index, label in enumerate(clusters.labels):
@@ -292,7 +376,9 @@ def run_strategy(
     truck_days: list[TruckDay] = []
 
     for day in range(layout.days):
-        fills, day_counters = step_day(cfg, layout, weights, was_overflowing, ever_overflowed, day)
+        fills, day_counters = step_day(
+            cfg, layout, weights, was_overflowing, ever_overflowed, day, window=window
+        )
         totals.overflow_events += day_counters.overflow_events
         totals.overflow_bin_days += day_counters.overflow_bin_days
         totals.overflowed_bins += day_counters.overflowed_bins
@@ -304,20 +390,32 @@ def run_strategy(
 
         # A missed pickup is a bin that was genuinely RED today and was not chosen. Ground truth
         # is read here, by the *scorer*, never by the strategy.
+        in_window = window is not None and window.covers(day)
         for i in range(layout.n_bins):
             if i in selected_set:
                 continue
             if truth_state(fills[i], weights[i], cfg.bin) is BinState.RED:
                 totals.missed_pickups += 1
+                if in_window and window is not None:
+                    window.counters.missed_pickups += 1
 
         totals.bin_visits += len(selected)
+        if in_window and window is not None:
+            window.counters.bin_visits += len(selected)
 
         # One truck per cluster. A cluster with nothing selected still produces a TruckDay, with
         # zero bins, so the fixed-cost bases can tell a parked truck from a rolling one.
         for cluster_id in range(clusters.n_clusters):
             cluster_selected = [i for i in members[cluster_id] if i in selected_set]
             distance_km = cache.distance_for(cluster_id, cluster_selected)
-            truck_days.append(TruckDay(distance_km=distance_km, bins_visited=len(cluster_selected)))
+            truck_day = TruckDay(distance_km=distance_km, bins_visited=len(cluster_selected))
+            truck_days.append(truck_day)
+            if in_window:
+                window_truck_days.append(truck_day)
+
+        # Tell the strategy what it actually collected, so a forecaster can reset that bin's
+        # history. It is told its OWN decisions only -- never the true fill it just emptied.
+        strategy.observe_collection(day, selected)
 
         for i in selected:
             weights[i] = 0.0
@@ -331,4 +429,7 @@ def run_strategy(
         counters=totals,
         route_cache_hits=cache.hits,
         route_cache_misses=cache.misses,
+        window_counters=window.counters if window is not None else None,
+        window_truck_days=tuple(window_truck_days),
+        window_start_day=0 if window is None else window.start_day,
     )
