@@ -411,6 +411,101 @@ class FusionEvalConfig:
 
 
 @dataclass(frozen=True)
+class VrpConfig:
+    """Phase 4 capacitated VRP and the routing-algorithm comparison.
+
+    **Every value in this section is invented and uncited** -- see docs/ASSUMPTIONS.md. Note
+    that ``ortools_time_limit_s`` is a *wall-clock* budget, which makes any OR-Tools distance
+    machine-dependent: tests assert route properties, never distances.
+    """
+
+    capacity_sweep_kg: tuple[float, ...]
+    max_trucks_per_cluster: int
+    ortools_time_limit_s: float
+    first_solution_strategy: str
+    local_search_metaheuristic: str
+    compare_clusters: int
+    compare_day: int
+
+    def validate(self) -> None:
+        # Imported lazily: smartwaste.routing.vrp imports this module, so a top-level import
+        # here would be a cycle. Same pattern as DemandConfig.validate above.
+        from smartwaste.routing.vrp import (
+            FIRST_SOLUTION_STRATEGIES,
+            LOCAL_SEARCH_METAHEURISTICS,
+        )
+
+        if not self.capacity_sweep_kg:
+            raise ConfigError("vrp.capacity_sweep_kg must list at least one value")
+        for value in self.capacity_sweep_kg:
+            if value <= 0:
+                raise ConfigError(f"vrp.capacity_sweep_kg values must be > 0, got {value}")
+        if self.max_trucks_per_cluster < 1:
+            raise ConfigError(
+                f"vrp.max_trucks_per_cluster must be >= 1, got {self.max_trucks_per_cluster}"
+            )
+        if self.ortools_time_limit_s <= 0:
+            raise ConfigError(
+                f"vrp.ortools_time_limit_s must be > 0, got {self.ortools_time_limit_s}"
+            )
+        if self.first_solution_strategy not in FIRST_SOLUTION_STRATEGIES:
+            raise ConfigError(
+                "vrp.first_solution_strategy must be one of "
+                f"{sorted(FIRST_SOLUTION_STRATEGIES)}, got {self.first_solution_strategy!r}"
+            )
+        if self.local_search_metaheuristic not in LOCAL_SEARCH_METAHEURISTICS:
+            raise ConfigError(
+                "vrp.local_search_metaheuristic must be one of "
+                f"{sorted(LOCAL_SEARCH_METAHEURISTICS)}, got {self.local_search_metaheuristic!r}"
+            )
+        if self.compare_clusters < 1:
+            raise ConfigError(f"vrp.compare_clusters must be >= 1, got {self.compare_clusters}")
+        if self.compare_day < 0:
+            raise ConfigError(f"vrp.compare_day must be >= 0, got {self.compare_day}")
+
+
+@dataclass(frozen=True)
+class RoadsConfig:
+    """Phase 4 real road network for one bounded Chennai area.
+
+    The area and the bin count are **invented, uncited** choices. Road data is (c) OpenStreetMap
+    contributors, ODbL 1.0. **Bin locations on the network are synthetic**: uniform-random points
+    in the bbox, snapped to the nearest drivable road node.
+    """
+
+    area_name: str
+    center_lat: float
+    center_lon: float
+    box_km: float
+    network_type: str
+    n_bins: int
+    cache_subdir: str
+
+    def validate(self) -> None:
+        from smartwaste.routing.roads import NETWORK_TYPES
+
+        if not self.area_name.strip():
+            raise ConfigError("roads.area_name must not be empty")
+        if not -90.0 <= self.center_lat <= 90.0:
+            raise ConfigError(f"roads.center_lat must be in [-90, 90], got {self.center_lat}")
+        if not -180.0 <= self.center_lon <= 180.0:
+            raise ConfigError(f"roads.center_lon must be in [-180, 180], got {self.center_lon}")
+        if self.box_km <= 0:
+            raise ConfigError(f"roads.box_km must be > 0, got {self.box_km}")
+        if self.network_type not in NETWORK_TYPES:
+            raise ConfigError(
+                f"roads.network_type must be one of {sorted(NETWORK_TYPES)}, "
+                f"got {self.network_type!r}"
+            )
+        # Two bins is the smallest set with a distance between them, which is the whole point of
+        # the detour-ratio measurement.
+        if self.n_bins < 2:
+            raise ConfigError(f"roads.n_bins must be >= 2, got {self.n_bins}")
+        if not self.cache_subdir.strip():
+            raise ConfigError("roads.cache_subdir must not be empty")
+
+
+@dataclass(frozen=True)
 class BenchmarkConfig:
     """Size and shape of the Phase 2 city benchmark."""
 
@@ -467,6 +562,8 @@ class Config:
     anomaly: AnomalyConfig
     cost: CostConfig
     routing: RoutingConfig
+    vrp: VrpConfig
+    roads: RoadsConfig
     fusion_eval: FusionEvalConfig
     benchmark: BenchmarkConfig
     paths: PathsConfig
@@ -482,6 +579,8 @@ class Config:
         self.anomaly.validate()
         self.cost.validate()
         self.routing.validate()
+        self.vrp.validate()
+        self.roads.validate()
         self.fusion_eval.validate()
         self.benchmark.validate()
         self.paths.validate()
@@ -522,6 +621,8 @@ def load_config(
         anomaly=_section(raw, "anomaly", AnomalyConfig),
         cost=_section(raw, "cost", CostConfig),
         routing=_section(raw, "routing", RoutingConfig),
+        vrp=_section(raw, "vrp", VrpConfig),
+        roads=_section(raw, "roads", RoadsConfig),
         fusion_eval=_section(raw, "fusion_eval", FusionEvalConfig),
         benchmark=_section(raw, "benchmark", BenchmarkConfig),
         paths=_section(raw, "paths", PathsConfig),

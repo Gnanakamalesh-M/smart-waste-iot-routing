@@ -131,6 +131,50 @@ routing:
   n_trucks_per_cluster: 1       # chosen: Phase 2 uses one truck per cluster; VRP relaxes this
   two_opt_max_iters: 1000       # chosen: iteration cap for the 2-opt TSP improvement pass
 
+vrp:
+  # PHASE 4. Every value in this section is INVENTED AND UNCITED, and not one was adjusted after
+  # seeing a result. In particular cost.truck_capacity_kg stays at the 8000.0 it has had since
+  # Phase 0 even though that forces awkward truck counts: raising it to tidy the tables would be
+  # tuning to the output. The sweep below exists for the same reason benchmark.fault_fractions
+  # does - the truck-count result must not rest on one invented number.
+  capacity_sweep_kg: [4000.0, 8000.0, 16000.0]
+                                # invented, uncited: the capacity sweep. 8000.0 is exactly
+                                #   cost.truck_capacity_kg; 4000 and 16000 bracket it.
+  max_trucks_per_cluster: 20    # invented, uncited: upper bound on vehicles handed to the solver.
+                                #   Not a fleet assumption - the solver uses as few as it can and
+                                #   the tables report how many it actually needed.
+  ortools_time_limit_s: 5.0     # invented, uncited: per-instance OR-Tools search budget.
+                                #   A WALL-CLOCK limit, so OR-Tools distances are NOT reproducible
+                                #   across machines. Tests therefore assert route properties only,
+                                #   never distances, and the results doc says same-machine-only.
+  first_solution_strategy: PATH_CHEAPEST_ARC
+                                # invented, uncited: OR-Tools first-solution heuristic.
+  local_search_metaheuristic: GUIDED_LOCAL_SEARCH
+                                # invented, uncited: OR-Tools improvement phase.
+  compare_clusters: 20          # invented, uncited: how many clusters feed the comparison tables.
+  compare_day: 14               # invented, uncited: which simulated day supplies the bin sets.
+                                #   Every algorithm is compared on the IDENTICAL bin sets from
+                                #   this one day, so the comparison is paired.
+
+roads:
+  # PHASE 4. The area and the bin count are INVENTED AND UNCITED choices of ours.
+  #
+  # Road data (c) OpenStreetMap contributors, ODbL 1.0 - https://www.openstreetmap.org/copyright
+  #
+  # BIN LOCATIONS ON THE ROAD NETWORK ARE SYNTHETIC: uniform-random points inside the bbox,
+  # snapped to the nearest drivable road node. They are not real bin sites.
+  area_name: T. Nagar, Chennai, India
+                                # chosen: the bounded area. The bbox below is what is actually
+                                #   downloaded; the name is a label, not a geocoding query.
+  center_lat: 13.0418           # invented, uncited: approximate T. Nagar centre.
+  center_lon: 80.2341           # invented, uncited: approximate T. Nagar centre.
+  box_km: 3.0                   # invented, uncited: bbox side length, so roughly 3 x 3 km.
+  network_type: drive           # chosen: OSMnx network filter; collection trucks use drivable roads.
+  n_bins: 300                   # invented, uncited: synthetic bins snapped to road nodes.
+                                #   NOT comparable with sim.n_bins = 5000 on the 100 km grid:
+                                #   different area, different count, different distance metric.
+  cache_subdir: osmnx           # chosen: graph cache under paths.cache_dir (gitignored).
+
 benchmark:
   fixed_schedule_days: 3        # chosen: N in strategy (b), "collect every bin every N days"
   n_seeds: 5                    # chosen: seeds 42..46; reported as a RANGE over seeds, not a CI

@@ -36,8 +36,11 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: python -m pip install --upgrade pip
       # mypy type-checks the lazy `import sklearn` lines inside src/smartwaste/ml, so the types
-      # job needs the ml extra even though the test chunks mostly do not.
-      - run: pip install -e ".[dev,ml]"
+      # job needs the ml extra even though the test chunks mostly do not. Phase 4 adds the same
+      # requirement for the `roads` extra: without it installed, mypy fails on the lazy
+      # `from ortools... import` / `import osmnx` lines in src/smartwaste/routing, which is
+      # exactly how the Phase 3 types job broke.
+      - run: pip install -e ".[dev,ml,roads]"
       - run: python -m mypy
 
   tests:
@@ -55,18 +58,26 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: python -m pip install --upgrade pip
-      # Only the `ml` chunk gets scikit-learn. The unit / sim / routing chunks must stay green
-      # without it, which is what the lazy imports in src/smartwaste/ml exist for: if a
-      # non-ml-marked test ever imports sklearn, this job fails rather than passing quietly on a
-      # machine that happens to have it installed.
-      - name: install (ml extra only for the ml chunk)
+      # One extra per chunk, and no chunk gets an extra it is not supposed to need:
+      #
+      #   ml      -> .[dev,ml]     scikit-learn, for the forecasting / anomaly models
+      #   routing -> .[dev,roads]  ortools + osmnx + networkx, for the Phase 4 VRP and roads
+      #   others  -> .[dev]        stdlib + pyyaml only
+      #
+      # That is what the lazy imports in src/smartwaste/ml and src/smartwaste/routing exist for:
+      # if a unit / sim / slow test ever imports one of these wheels, this job fails rather than
+      # passing quietly on a machine that happens to have it installed. The `routing` chunk's
+      # ortools/osmnx tests are additionally guarded with `pytest.importorskip`, so that chunk is
+      # green both here (tests run) and on a machine without the extra (tests skip) -- verified
+      # locally by uninstalling, see docs/PHASE4_RESULTS.md.
+      - name: install (one extra per chunk)
         shell: bash
         run: |
-          if [ "${{ matrix.chunk }}" = "ml" ]; then
-            pip install -e ".[dev,ml]"
-          else
-            pip install -e ".[dev]"
-          fi
+          case "${{ matrix.chunk }}" in
+            ml)      pip install -e ".[dev,ml]" ;;
+            routing) pip install -e ".[dev,roads]" ;;
+            *)       pip install -e ".[dev]" ;;
+          esac
       - name: marker '${{ matrix.chunk }}' is registered
         shell: bash
         # pytest's --strict-markers rejects unregistered markers on tests, but NOT in a -m
@@ -105,7 +116,8 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: python -m pip install --upgrade pip
-      # Deliberately WITHOUT the ml extra: the slow chunk must not need scikit-learn either.
+      # Deliberately WITHOUT the ml and roads extras: the slow chunk must not need scikit-learn,
+      # ortools or osmnx either.
       - run: pip install -e ".[dev]"
       - name: marker 'slow' is registered
         shell: bash

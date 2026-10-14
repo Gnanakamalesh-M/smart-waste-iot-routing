@@ -39,7 +39,18 @@ ml = [
     "numpy>=1.26",
     "scikit-learn>=1.5",
 ]
-routing = [
+# Phase 4's optional extra, and the ONLY extra any Phase 4 code needs.
+#
+# Named `roads` rather than `routing`, deliberately: `routing` is also a pytest marker, and that
+# chunk must stay installable from `[dev]` alone. Two different things called "routing" in the
+# same CI file is how a chunk quietly starts depending on a wheel it is supposed to prove it does
+# not need.
+#
+# All three are imported LAZILY, inside the functions that need them, so the stdlib routing
+# (nearest neighbour, 2-opt, the capacity executor, the bbox and detour-ratio maths) all runs
+# without this extra installed. The unit / sim / routing / slow chunks must stay green without
+# it; every test that touches ortools, osmnx or networkx is guarded with `pytest.importorskip`.
+roads = [
     "ortools>=9.10",
     "networkx>=3.3",
     "osmnx>=1.9",
@@ -78,6 +89,14 @@ no_implicit_optional = true
 # estimator keep their own local ignores.
 [[tool.mypy.overrides]]
 module = ["sklearn.*"]
+ignore_missing_imports = true
+
+# Same situation for the Phase 4 `roads` extra: ortools ships no usable stubs for the routing
+# solver, and osmnx / networkx are untyped from strict mode's point of view. The CI `types` job
+# installs `.[dev,ml,roads]` so these imports resolve at all; without the install, mypy fails on
+# the import lines themselves rather than on anything we wrote.
+[[tool.mypy.overrides]]
+module = ["ortools.*", "osmnx.*", "networkx.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

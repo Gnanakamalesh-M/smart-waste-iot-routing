@@ -1,7 +1,12 @@
-"""Route optimization: geographic clustering and depot-constrained TSP.
+"""Route optimization: clustering, depot-constrained TSP, capacitated VRP and real road distances.
 
-Phase 2 scope: Euclidean distance on a random grid, one truck per cluster, no capacity limit.
-Real road distances (OSMnx) and capacitated multi-truck VRP are Phase 4.
+Phase 2 scope: Euclidean distance on a random grid, one truck per cluster, no capacity limit --
+all still here, unchanged, in :mod:`smartwaste.routing.tsp` and :mod:`smartwaste.routing.cluster`.
+
+Phase 4 adds :mod:`smartwaste.routing.vrp` (truck capacity, multiple trucks, OR-Tools) and
+:mod:`smartwaste.routing.roads` (OSMnx road distances for one bounded Chennai area). Both import
+``ortools`` / ``osmnx`` / ``networkx`` **lazily**, inside the functions that need them, so this
+package imports cleanly without the optional ``roads`` extra installed.
 """
 
 from smartwaste.routing.cluster import ClusterResult, kmeans
