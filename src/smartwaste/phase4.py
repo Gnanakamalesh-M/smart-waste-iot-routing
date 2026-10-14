@@ -721,6 +721,7 @@ def _algo_row(table: str, r: AlgorithmResult, results: Phase4Results) -> dict[st
 def quick_banner() -> str:
     """The smoke-run warning, prepended ONCE to a report rather than to every table."""
     return (
-        "> **SMOKE RUN, NOT FOR PUBLICATION.** Smaller than the default run. Every number"
-        " in `docs/PHASE4_RESULTS.md` comes from the full run only.\n"
+        "> **SMOKE RUN, NOT FOR PUBLICATION.** Smaller than the default run, so these numbers"
+        " show the MECHANISM, not city-scale magnitude. The full-run command is in"
+        " `docs/PHASE4_RESULTS.md`.\n"
     )
