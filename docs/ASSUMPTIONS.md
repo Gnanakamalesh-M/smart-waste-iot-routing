@@ -4,9 +4,9 @@ The IEEE paper we extend leaves most of its simulation constants unstated (alpha
 wages, speeds, truck capacity). Every such value lives in exactly one place —
 `config/default.yaml` — and every one is recorded below.
 
-**As of Phase 2**, the parameters the Phase 1 and Phase 2 experiments actually read are `USED`;
+**As of Phase 3**, the parameters the Phase 1-3 experiments actually read are `USED`;
 everything else is still a `PLACEHOLDER`. **Nothing anywhere in this file is `VALIDATED`** - that
-requires an external citation or a real measurement, and neither phase has either. `USED` means
+requires an external citation or a real measurement, and no phase has either. `USED` means
 only "a real run reads this and its value changes the output", not "this value is realistic".
 
 > ### Banner: the entire `cost` section is invented and uncited
@@ -27,15 +27,38 @@ only "a real run reads this and its value changes the output", not "this value i
 > carry no external meaning.** Only the *relative* comparison between strategies is informative,
 > and even that shifts if the relative sizes of the fuel, labor and fixed terms are wrong.
 
+> ### Banner: the entire `demand`, `forecast` and `anomaly` sections are invented and uncited
+>
+> Phase 3 adds three whole sections, and **not one value in any of them has a citation or a
+> measurement behind it.** The paper models arrivals as `W_i(t) = W_i(t-1) + dW_i(t)` with
+> "random daily increments" and states **no distribution, no heterogeneity and no calendar**; it
+> describes no forecasting and no anomaly detection at all. So area types, the weekday cycle,
+> festival spikes, every forecasting knob and every planted-fault parameter are modelling
+> choices of ours with no field data.
+>
+> **The consequence is specific and it matters:** Phase 3's finding that a forecaster earns its
+> keep where Phase 2's calendar did not **holds on our invented demand only.** It is not
+> evidence about a real city. `docs/PHASE3_RESULTS.md` states this beside the tables.
+>
+> **Nothing in these sections was tuned to make a model win.** In particular
+> `forecast.warmup_days` stays at 14 even though that left the gradient-boosting model with
+> **zero festival days in training** (measured, and reported). Lengthening the warm-up until the
+> ML model looked better would have been tuning to the result. Likewise `demand.area_mean_kg`
+> was rescaled before any Phase 3 benchmark ran, and rescaled to *remove* an advantage rather
+> than to create one - see its row below.
+
 The commands that promoted the `USED` rows below, run from the repo root:
 
 ```
 python scripts\run_fusion_eval.py
 python scripts\run_benchmark.py --seed 42
+python scripts\run_phase3_benchmark.py --seed 42
+python scripts\run_forecast.py --seed 42
+python scripts\run_anomaly.py --seed 42
 ```
 
-Their output is in `docs/PHASE1_RESULTS.md` and `docs/PHASE2_RESULTS.md` (and, regenerated, in
-`results/`).
+Their output is in `docs/PHASE1_RESULTS.md`, `docs/PHASE2_RESULTS.md` and
+`docs/PHASE3_RESULTS.md` (and, regenerated, in `results/`).
 
 ## Status legend
 
@@ -101,6 +124,54 @@ All rows are set in `config/default.yaml`.
 | `sim.daily_fill_mean_kg` | 4.0 | chosen | USED | Phase 1 | Mean of the daily increment `dW_i(t)`. Paper says "random increments" without a distribution; we use a Gaussian floored at 0. **Row retargeted from Phase 2 to Phase 1**: the single-bin simulation already drives the arrival process, so Phase 1 genuinely exercises it. It sets how often a bin reaches RED and therefore the size of the `n(RED)` denominator behind every false-GREEN rate. |
 | `sim.daily_fill_sd_kg` | 1.5 | chosen | USED | Phase 1 | Spread of the daily increment. Retargeted from Phase 2 for the same reason. |
 
+### `demand` - Phase 3 waste arrival process (**every row invented and uncited**)
+
+See the second banner at the top of this file. `smartwaste.demand` implements two scenarios:
+`smooth` is Phase 2's process reproduced bit for bit (so `docs/PHASE2_RESULTS.md` stays
+reproducible), and `heterogeneous` is the Phase 3 process these rows configure. Both are
+reported.
+
+| Parameter | Value | Source | Status | Validated in | Why |
+|---|---|---|---|---|---|
+| `demand.scenario` | `heterogeneous` | **invented, uncited** | USED | Phase 3 | Which arrival process the Phase 3 runners default to. `smooth` stays selectable and is `build_layout`'s default, because every Phase 2 caller omits the argument and must keep getting Phase 2's exact numbers - `tests/test_demand.py` pins those numbers as literals. |
+| `demand.area_type_weights` | [0.2, 0.5, 0.3] | **invented, uncited** | USED | Phase 3 | Share of bins that are market / residential / apartment. No survey behind the split; a guess at a plausible mix. Must sum to 1.0 (enforced in `config.py`). |
+| `demand.area_mean_kg` | [6.0, 2.0, 3.4] | **invented, uncited** | USED | Phase 3 | Mean daily arrival per area type. **Deliberately rescaled to remove an advantage, not to create one.** The first draft, [9.0, 3.0, 5.0], gave an effective mean of **5.883 kg/bin/day - 47.1% more waste than Phase 2's 4.0** - once the weekday mean (**1.1143**) and the festival factor (**1.1000**) were applied. A heterogeneous city that simply makes half again as much waste would improve every Phase 3 number for a reason unrelated to sensors or forecasting. These values give **3.947 kg/bin/day, -1.3% from 4.0**, so the two scenarios differ in *variance*, not volume. `tests/test_demand.py` **measures** the realised mean over 400 bins x 700 days and fails if it drifts more than 5% from `sim.daily_fill_mean_kg`. |
+| `demand.cv` | 0.35 | **invented, uncited** | USED | Phase 3 | Per-bin-day coefficient of variation; `sd = mean * cv`, so spread scales with the mean. A market bin is then noisy in kg and a residential bin quiet - the heteroscedasticity a fixed calendar cannot exploit and a forecaster might. Pure guess. |
+| `demand.weekday_multipliers` | [1.0, 1.0, 1.0, 1.0, 1.15, 1.4, 1.25] | **invented, uncited** | USED | Phase 3 | Mon..Sun. Day 0 of every horizon is taken to be a Monday, fixed so a seed-to-seed difference is never just a calendar shift. Their mean is **1.1143**, part of the volume-matching arithmetic above. No citation. |
+| `demand.festival_days_per_month` | 2 | **invented, uncited** | USED | Phase 3 | Quoted per 30 days, so a 30-day horizon gets 2 festival days. **Measured in the real run: both landed outside the 14-day warm-up**, so the forecaster trained on zero of them. Reported as a limitation, not fixed. |
+| `demand.festival_multiplier` | 2.5 | **invented, uncited** | USED | Phase 3 | Arrival multiplier on a festival day. Contributes the **1.1000** factor to the 30-day mean. Pure guess. |
+
+### `forecast` - Phase 3 fill-level forecasting (**every row invented and uncited**)
+
+| Parameter | Value | Source | Status | Validated in | Why |
+|---|---|---|---|---|---|
+| `forecast.warmup_days` | 14 | **invented, uncited** | USED | Phase 3 | Days 0..13 run the backstop calendar only and log noisy estimates; the model is fitted once at day 14 and frozen. This **is** the time-based split CLAUDE.md requires - no random split exists anywhere in the forecasting code. It also defines the headline scoring window, since before day 14 strategy (f) is literally its own calendar. **Not tuned:** at 14 days the model saw 7 distinct weekdays but **0 festival days** (measured), which plausibly costs it accuracy on festival days. Lengthening the warm-up until the ML model won would be tuning to the result, so it stays. |
+| `forecast.horizon_days` | 3 | **invented, uncited** | USED | Phase 3 | How far ahead a forecast looks. Capped per row by the longest *clean* span - one containing no collection - because a fill drop across a collection measures the truck, not demand. Without that cap a 3-day horizon under a 3-day calendar yields **zero** training rows, since any three consecutive days contain a multiple of three. |
+| `forecast.history_days` | 5 | **invented, uncited** | USED | Phase 3 | Lags of `Fv_hat` and noisy weight used as features. Constrained in `config.py` to be `<= warmup_days`, or no training row could ever be built. |
+| `forecast.moving_average_window` | 3 | **invented, uncited** | USED | Phase 3 | Window for the moving-average **baseline** - the one the gradient-boosting model has to beat. Not tuned, for the same reason `benchmark.fixed_schedule_days` is not: tuning the baseline would be tuning the thing being measured against. |
+| `forecast.backstop_days` | [3.0, 7.0] | **invented, uncited** | USED | Phase 3 | The scheduled-visit floor each forecast-driven strategy falls back on. **Both are run, and each is compared against the sensor-free calendar of the same period** (3 vs `b`, 7 vs `b7`); otherwise "forecasting wins" could just mean "collecting less often is cheaper". |
+| `forecast.gbm_max_iter` | 200 | **invented, uncited** | USED | Phase 3 | `HistGradientBoostingRegressor` iterations. Never swept; one value, chosen before any run. |
+| `forecast.gbm_learning_rate` | 0.1 | **invented, uncited** | USED | Phase 3 | As above - the library default, not tuned. |
+| `forecast.gbm_max_depth` | 4 | **invented, uncited** | USED | Phase 3 | As above. **No hyperparameter search was performed at all**, deliberately: a tuned ML model against an untuned baseline would be an unfair comparison. |
+
+### `anomaly` - Phase 3 sensor anomaly detection (**every row invented and uncited**)
+
+| Parameter | Value | Source | Status | Validated in | Why |
+|---|---|---|---|---|---|
+| `anomaly.n_bins` | 400 | **invented, uncited** | USED | Phase 3 | Bins in the planted-fault dataset. With `days = 60` and `window_days = 5` this yields 22,400 scored windows. |
+| `anomaly.days` | 60 | **invented, uncited** | USED | Phase 3 | Days per bin. Longer than the 30-day city horizon so a drift fault has room to develop. |
+| `anomaly.fault_bin_fraction` | 0.15 | **invented, uncited** | USED | Phase 3 | Share of bins given a planted fault. Note this is a share of **bins**, and each episode covers only part of the horizon, so the share of faulty **windows** is far lower - **measured at 0.0312**. That is precisely why accuracy is banned here: "never faulty" would score **96.9%** while catching nothing. |
+| `anomaly.window_days` | 5 | **invented, uncited** | USED | Phase 3 | Rolling window the detectors score over. A window is labelled faulty when **its last day** falls inside the episode - a choice, stated in the results doc, not a fact. |
+| `anomaly.validation_seed_offset` | 1 | **invented** | USED | Phase 3 | Thresholds are chosen on seed+1 and applied **unchanged** to the scoring seed. `config.py` **rejects 0**, because choosing a threshold on the scoring seed's planted labels is exactly the leakage this project forbids everywhere else. |
+| `anomaly.min_fault_days` | 6 | **invented, uncited** | USED | Phase 3 | Shortest planted episode. |
+| `anomaly.max_fault_days` | 20 | **invented, uncited** | USED | Phase 3 | Longest planted episode. Constrained to `<= anomaly.days`. |
+| `anomaly.drift_cm_per_day` | 1.2 | **invented, uncited** | USED | Phase 3 | How fast a drifting sensor wanders. **An influential guess:** drift turned out to be the family both detectors are near-blind to (PR-AUC 0.0311 rule / 0.0152 forest against a 0.0071 prevalence), and a larger drift rate would be easier to catch. |
+| `anomaly.noise_burst_sigma_cm` | 12.0 | **invented, uncited** | USED | Phase 3 | Extra Gaussian sigma during a noise burst. Same caveat as drift. |
+| `anomaly.stuck_tolerance_cm` | 0.05 | **invented, uncited** | USED | Phase 3 | Starting point for the rule baseline's "no variance" tolerance, and one candidate in `RULE_TOLERANCE_GRID`. The *reported* run used **2.000**, selected on the validation seed. |
+| `anomaly.disagreement_cm` | 25.0 | **invented, uncited** | USED | Phase 3 | Starting point for the rule's 3-sensor disagreement limit. The reported run selected **25.000** on the validation seed. |
+| `anomaly.contamination` | 0.15 | **invented, uncited** | USED | Phase 3 | Starting point for the Isolation Forest's expected outlier share. The reported run selected **0.100** on the validation seed. |
+| `anomaly.n_estimators` | 200 | **invented, uncited** | USED | Phase 3 | Isolation Forest trees. Not swept. |
+
 ### `cost` — fuel, CO2, labor, time
 
 | Parameter | Value | Source | Status | Validated in | Why |
@@ -144,11 +215,90 @@ All rows are set in `config/default.yaml`.
 
 | Parameter | Value | Source | Status | Validated in | Why |
 |---|---|---|---|---|---|
-| `paths.data_dir` | `data` | chosen | PLACEHOLDER | Phase 2 | Generated datasets. Gitignored. |
+| `paths.data_dir` | `data` | chosen | USED | Phase 3 | Generated datasets. Gitignored. `run_anomaly.py` writes `anomaly_readings.csv` and `anomaly_labels.csv` here - **two separate files**, so the detectors can be handed the readings with no path to the planted truth. |
 | `paths.cache_dir` | `cache` | chosen | PLACEHOLDER | Phase 4 | Downloaded artifacts, e.g. OSMnx road graphs. Gitignored. |
-| `paths.results_dir` | `results` | chosen | USED | Phase 2 | Benchmark tables and figures. `run_benchmark.py` writes `benchmark.csv` and `benchmark.md` here. Gitignored, so the committed numbers live in `docs/PHASE2_RESULTS.md`. |
+| `paths.results_dir` | `results` | chosen | USED | Phase 2 | Benchmark tables and figures. `run_benchmark.py` writes `benchmark.csv`/`benchmark.md`; Phase 3 adds `phase3_benchmark.*`, `forecast_eval.*` and `anomaly_eval.*`. Gitignored, so the committed numbers live in `docs/PHASE{1,2,3}_RESULTS.md`. |
 
 ## Not verified / Limitations
+
+New in Phase 3:
+
+- **Phase 2 was re-checked, not assumed.** Phase 3 changed `city_sim.py` and `strategies.py`, so
+  the full Phase 2 benchmark was re-run from the Phase 3 tree: all **63 data rows** it produced
+  appear verbatim in `docs/PHASE2_RESULTS.md`. Phase 2's entry points were deliberately not
+  widened (Phase 3 added a parallel runner instead), `build_layout`'s new `scenario` argument is
+  keyword-only and defaults to `"smooth"`, and a test pins Phase 2's totals as literals. All five
+  changed test files are **new** - no pre-existing test was edited.
+
+- **The entire Phase 3 demand model is invented** (see the second banner above), and it is the
+  foundation everything else in Phase 3 stands on. Area types, the weekday cycle and festival
+  spikes have no field data behind them. **Where a Phase 3 result depends on demand varying, it
+  holds on our invented demand only** and is not evidence about a real city.
+- **The city-scale strategy benchmark was NOT RUN, so Phase 3 settles nothing about collection
+  outcomes.** The full sweep measures about 2.3 hours (the phase was planned on a 35-50 minute
+  estimate, which did not account for 2-opt cost growing with the larger per-day bin sets the
+  forecast strategies select). `docs/PHASE3_RESULTS.md` therefore contains **no** overflow,
+  distance or cost figure for strategy (f), and **no verdict** on whether Phase 2's "a
+  sensor-free 3-day calendar matches the paper's fusion" finding survives heterogeneous demand -
+  in either direction. The code, the ten strategies and the two scoring windows are built and
+  tested; only the publication-size run is missing. A lower forecast MAE is **not** evidence of a
+  better collection outcome, which was Phase 2's whole lesson.
+- **The simple baseline beat the ML detector on every anomaly family, including the two fair
+  tests.** The stdlib rule baseline beat the Isolation Forest on PR-AUC overall (0.5664 vs
+  0.1523) and on all four families. CLAUDE.md requires that be said plainly rather than buried,
+  so it is the headline of the anomaly section.
+- **`stuck` and `dropout` favour the rule baseline by construction** and are labelled as such in
+  every table. The rule's zero-variance test is very nearly a *definition* of those two faults,
+  so a win there demonstrates a mechanism; it is not a measurement. `drift` and `noise_burst`
+  are the fair tests, and the rule won those too - by much smaller margins.
+- **Both detectors are nearly blind to drift.** PR-AUC 0.0311 (rule) and 0.0152 (forest) against
+  a prevalence of 0.0071. A slow drift looks like a slowly filling bin, which is exactly what the
+  sensor is supposed to report. `anomaly.drift_cm_per_day` is invented, and a larger value would
+  be easier to catch, so this is partly a statement about our fault model.
+- **The gradient-boosting model trained on ZERO festival days.** Measured: `forecast.warmup_days
+  = 14` and both of the horizon's 2 festival days fell outside it. The model is therefore scored
+  on days containing a phenomenon it never saw in training. **No constant was changed to fix
+  this**, because lengthening the warm-up until the model looked better would be tuning to the
+  result.
+- **The forecaster predicts its own sensors, not the truth.** Targets are the future *fused
+  noisy estimate*, because a forecaster on real hardware has no ground truth to regress on. The
+  honest consequence is that a persistent sensor bias is **learned rather than corrected**, and
+  the reported MAE/RMSE measure agreement with the sensors, not with reality.
+- **ML numbers are reproducible on this machine only.** The stdlib parts of this project keep
+  their cross-machine byte-identical guarantee, but scikit-learn promises no bit-identical floats
+  across operating systems, BLAS builds or library versions. The reported ML rows come from
+  **numpy 2.4.6 and scikit-learn 1.9.1 on Windows / Python 3.11**. No test pins an exact float
+  from a model; the ML tests assert properties instead.
+- **scikit-learn was substituted for xgboost.** SPEC section 5 says "XGBoost first"; Phase 3 uses
+  `HistGradientBoostingRegressor` - the same model family, one fewer heavy dependency. That is a
+  deviation from the spec, recorded here rather than quietly made.
+- **No hyperparameter search was performed, for either model.** `gbm_max_iter`,
+  `gbm_learning_rate`, `gbm_max_depth` and `n_estimators` were each chosen once before any run.
+  This is deliberate: a tuned ML model against an untuned baseline would be an unfair comparison.
+  It also means the ML results are a floor, not the best the model could do.
+- **The anomaly window label is a modelling choice.** A window counts as faulty when **its last
+  day** falls inside the planted episode. Labelling by "any day overlaps" would mark windows
+  faulty before the fault had produced visible evidence; "every day overlaps" would discard the
+  onset. Neither is more correct; the choice is stated, not justified.
+- **Forecast-driven collection spreads visits across days, which is expected to cost more per
+  bin.** The calendars collect every bin on one day and get one efficient tour; strategy (f)
+  collects smaller sets on more days, so each tour pays the depot trip again. This is a
+  structural consequence of the routing model (one tour per cluster per day, single central
+  depot) rather than a forecasting failure - but note it is a **prediction from the model's
+  shape, not a measurement**, since the benchmark was not run.
+- **The headline window is 16 of 30 days** (days 14-29), because the forecasters' warm-up is
+  excluded. Every strategy is scored on that identical window, and overflow is reported as events
+  per bin-day so the 16-day and 30-day tables could be read against each other. This is how the
+  benchmark is built and tested; it has not yet produced published numbers.
+- **Yellow-bin opportunistic collection was NOT built.** SPEC section 7 lists it under Phase 3;
+  this phase's scope excluded it, so YELLOW bins are still never collected except when a forecast
+  or the backstop happens to pick them up. The paper's known weakness is therefore only partly
+  addressed.
+- **The anomaly dataset uses a plain saw-tooth fill process**, not the Phase 3 demand model. It
+  is a dataset about *sensor behaviour*, so the fill process is deliberately simple; that also
+  means the detectors have never been tested against festival spikes or area heterogeneity.
+- **No VRP, no truck capacity, no road network** - unchanged from Phase 2 and still Phase 4's
+  work. Every Phase 3 distance is Euclidean on the same uniform-random 100 km grid.
 
 New in Phase 2:
 
@@ -194,7 +344,10 @@ New in Phase 2:
 - **KMeans clusters are fixed for the whole month** and computed on bin locations only, ignoring
   how much waste each bin produces, so territories are balanced by area rather than by workload.
 - **Yellow bins are still never collected** under every sensor strategy, faithfully reproducing the
-  paper's rule and its known weakness. Phase 3 addresses it.
+  paper's rule and its known weakness. **Phase 3 did NOT fix this** - opportunistic Yellow-bin
+  collection was outside its scope, so the weakness survives into Phase 4. Phase 3's
+  forecast-driven strategies do pick up some YELLOW bins, but only incidentally, when a forecast
+  or the backstop schedule happens to select them.
 - **Five seeds is a range, not a confidence interval.** The results doc reports mean and min-max
   across seeds 42-46 and deliberately never calls it a CI.
 - **The benchmark took 7.8 minutes** on one Windows machine; that is a measured wall-clock figure
@@ -235,10 +388,10 @@ New in Phase 1:
 
 Carried over from Phase 0:
 
-- **Every config value not marked `USED` above is a `PLACEHOLDER`.** As of Phase 2 only
-  `cost.truck_capacity_kg`, `routing.n_trucks_per_cluster`, `paths.data_dir` and
-  `paths.cache_dir` remain unread by any run. **No value anywhere in this file is
-  `VALIDATED`.**
+- **Every config value not marked `USED` above is a `PLACEHOLDER`.** As of Phase 3 only
+  `cost.truck_capacity_kg`, `routing.n_trucks_per_cluster` and `paths.cache_dir` remain unread
+  by any run; `paths.data_dir` was promoted by the Phase 3 anomaly dataset. **No value anywhere
+  in this file is `VALIDATED`.**
 - **Only 1 physical bin was built** (in the paper's hardware work). Everything at city scale is
   simulation.
 - **The 5000-bin, 30-day results are simulation**, not measurements from deployed bins.
@@ -251,7 +404,8 @@ Carried over from Phase 0:
   (b) and (c), and they confirm it: a sensor-free 3-day schedule captures essentially the
   same saving as the paper's sensor fusion.
 - **Yellow bins are never collected** under the paper's rule, which risks overflow. Still
-  true in Phase 2, by design. Phase 3 addresses it.
+  true after Phase 3: the dedicated Yellow-bin logic SPEC section 7 lists under Phase 3 was
+  **not built**, being outside this phase's scope.
 - **The paper's own reported figures** (34.04% travel time, 22.22% cost, 31.85% CO2) are
   reference only. We do not promise to reproduce them and will not tune toward them.
 - **Paper inconsistencies** carried forward knowingly: 30 days vs "three-month"; "34.04%

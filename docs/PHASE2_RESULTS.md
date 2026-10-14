@@ -428,7 +428,8 @@ fc results\bench1.txt results\bench2.txt
 - **Overflow has no cost attached.** It is reported as a count beside cost, never folded into it,
   because we have no defensible price for an overflowing bin.
 - **Yellow bins are never collected**, faithfully reproducing the paper's rule and its known
-  weakness. Phase 3 addresses it.
+  weakness. *(Correction added in Phase 3: Phase 3 did **not** address this - opportunistic
+  Yellow-bin collection was outside its scope. No Phase 2 measurement above is affected.)*
 - **Five seeds is a range, not a confidence interval**, and is never described as one.
 - **The 7.8 minute runtime** is wall clock on one Windows machine, not a benchmark of the
   algorithms.
