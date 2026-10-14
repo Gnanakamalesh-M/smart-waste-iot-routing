@@ -4,10 +4,11 @@ The IEEE paper we extend leaves most of its simulation constants unstated (alpha
 wages, speeds, truck capacity). Every such value lives in exactly one place —
 `config/default.yaml` — and every one is recorded below.
 
-**As of Phase 3**, the parameters the Phase 1-3 experiments actually read are `USED`;
-everything else is still a `PLACEHOLDER`. **Nothing anywhere in this file is `VALIDATED`** - that
-requires an external citation or a real measurement, and no phase has either. `USED` means
-only "a real run reads this and its value changes the output", not "this value is realistic".
+**As of Phase 4 every row is `USED`** - the last three `PLACEHOLDER`s
+(`cost.truck_capacity_kg`, `routing.n_trucks_per_cluster`, `paths.cache_dir`) were promoted by the
+Phase 4 VRP and roads runs. **Nothing anywhere in this file is `VALIDATED`** - that requires an
+external citation or a real measurement, and no phase has either. `USED` means only "a real run
+reads this and its value changes the output", not "this value is realistic".
 
 > ### Banner: the entire `cost` section is invented and uncited
 >
@@ -47,6 +48,30 @@ only "a real run reads this and its value changes the output", not "this value i
 > was rescaled before any Phase 3 benchmark ran, and rescaled to *remove* an advantage rather
 > than to create one - see its row below.
 
+> ### Banner: the entire `vrp` and `roads` sections are invented and uncited
+>
+> Phase 4 adds two more sections, and **not one value in either has a citation or a measurement
+> behind it.** The paper mentions truck capacity as an unstated constant and describes no road
+> network at all, so the capacity sweep, the solver budget, the comparison day, the Chennai area,
+> the bounding-box size and the road bin count are all modelling choices of ours.
+>
+> **Nothing was tuned, and one case is worth spelling out.** `cost.truck_capacity_kg` stayed at
+> the **8000.0** it has had since Phase 0 even after the first run showed that a cluster's whole
+> day is about **296 kg** — 3.7% of it — so the capacity constraint **never binds** and Phase 4's
+> capacity table is flat and uninteresting. Lowering the capacity until the table looked
+> interesting would have been tuning to the output. `vrp.capacity_sweep_kg` likewise stayed at
+> [4000, 8000, 16000] after it was clear all three were non-binding. A separate 150 kg run exists
+> to show the mechanism works and is labelled **not a realistic truck** everywhere it appears.
+>
+> **The consequence is specific:** Phase 4's noisy-plan-vs-oracle comparison came out a **tie**,
+> and that is a *null result caused by the above*, not evidence that sensor fusion is accurate
+> enough for dispatch. With capacity non-binding, nothing rides on the weight estimate, so sensor
+> noise is never tested. `docs/PHASE4_RESULTS.md` states that beside the table.
+>
+> **The road detour ratio is a measurement, and the only one Phase 4 really produced** — but it
+> covers **one** ~3 km area with **synthetic** bin locations, and it does **not** transfer to
+> Phase 2's 100 km grid. Road data is © OpenStreetMap contributors, **ODbL 1.0**.
+
 The commands that promoted the `USED` rows below, run from the repo root:
 
 ```
@@ -55,10 +80,17 @@ python scripts\run_benchmark.py --seed 42
 python scripts\run_phase3_benchmark.py --seed 42
 python scripts\run_forecast.py --seed 42
 python scripts\run_anomaly.py --seed 42
+python scripts\run_phase4_vrp.py --seed 42 --quick
+python scripts\run_roads.py --seed 42 --quick
 ```
 
-Their output is in `docs/PHASE1_RESULTS.md`, `docs/PHASE2_RESULTS.md` and
-`docs/PHASE3_RESULTS.md` (and, regenerated, in `results/`).
+**The two Phase 4 commands were run at `--quick` size only.** Their rows below are `USED` because
+a real run genuinely reads each one and its value changes the output — which is all `USED` has ever
+meant here — not because a publication-size run exists. It does not; see
+`docs/PHASE4_RESULTS.md`.
+
+Their output is in `docs/PHASE1_RESULTS.md`, `docs/PHASE2_RESULTS.md`,
+`docs/PHASE3_RESULTS.md` and `docs/PHASE4_RESULTS.md` (and, regenerated, in `results/`).
 
 ## Status legend
 
@@ -184,15 +216,46 @@ reported.
 | `cost.fixed_cost_per_day` | 2000.0 | **invented, uncited** | USED | Phase 2 | Fixed cost per truck per day (INR). Pure guess. **Whether an idle truck is charged this is a modelling choice that moves the headline saving**, so Phase 2 reports three cost bases (variable-only, rolling fleet, fleet fixed at baseline size) instead of picking one. |
 | `cost.truck_speed_kmph` | 25.0 | **invented, uncited** | USED | Phase 2 | Average urban collection speed; converts distance to driving time. Pure guess. |
 | `cost.service_time_min_per_bin` | 3.0 | **invented, uncited** | USED | Phase 2 | Time to empty one bin. Pure guess. It is what makes travel time depend on bin count and not only on distance, and it is why the travel-time reduction is much larger than the distance reduction. |
-| `cost.truck_capacity_kg` | 8000.0 | chosen | PLACEHOLDER | Phase 4 | Payload capacity. Still genuinely unread: Phase 2 imposes **no capacity limit**, so a tour may collect more than a real truck could carry. The VRP phase fixes that. |
+| `cost.truck_capacity_kg` | 8000.0 | **invented, uncited** | USED | Phase 4 | Payload capacity, now genuinely read: `scripts\run_phase4_vrp.py` enforces it as an OR-Tools capacity dimension and Table C plans against it. **Measured consequence: it never binds.** A bin holds ~50 kg (`bin.w_max_kg`) and strategy (d) selects ~9 bins per cluster per day, so a cluster's whole day is **296.24 kg** against 8000 — **3.7%**. A truck would need ~160 full bins in one tour before capacity mattered. So Phase 2's "no capacity limit flatters strategies that visit many bins" limitation **was not actually biting**. **The value was NOT changed** once that was known; lowering it until the table looked interesting would be tuning to the output. |
 
 ### `routing`
 
 | Parameter | Value | Source | Status | Validated in | Why |
 |---|---|---|---|---|---|
 | `routing.n_clusters` | 20 | chosen | USED | Phase 2 | KMeans geographic clusters, one truck each; the paper splits the city into clusters without giving a count. 20 clusters over 5000 bins is 250 bins per territory. This value sets the baseline fleet size, so it also sets the fixed-cost denominator in two of the three cost bases. |
-| `routing.n_trucks_per_cluster` | 1 | chosen | PLACEHOLDER | Phase 4 | Phase 2 runs one depot-constrained tour per cluster; VRP relaxes this. |
+| `routing.n_trucks_per_cluster` | 1 | chosen | USED | Phase 4 | Phase 2 runs one depot-constrained tour per cluster. Phase 4's VRP relaxes it: `vrp.max_trucks_per_cluster` is the upper bound handed to the solver, and this value remains what Phase 2's tables were built on. At the committed capacity the solver chose **1 truck per cluster anyway** (5 trucks over 5 clusters), so Phase 2's assumption turned out to be what capacity would have forced in any case. At a deliberately binding 150 kg it chose 14. |
 | `routing.two_opt_max_iters` | 1000 | chosen | USED | Phase 2 | Iteration cap for the 2-opt improvement pass, a runtime guard. 2-opt only accepts strict improvements, so hitting the cap returns a tour that is still no longer than the nearest-neighbour tour it started from (pinned in `tests/test_tsp.py`). |
+
+### `vrp` - Phase 4 capacitated VRP and algorithm comparison (**every row invented and uncited**)
+
+See the third banner at the top of this file.
+
+| Parameter | Value | Source | Status | Validated in | Why |
+|---|---|---|---|---|---|
+| `vrp.capacity_sweep_kg` | [4000.0, 8000.0, 16000.0] | **invented, uncited** | USED | Phase 4 | The capacity sweep, which exists for the same reason `benchmark.fault_fractions` does: `cost.truck_capacity_kg` is invented, so the truck-count result must not rest on one guess. 8000 is exactly that config value; 4000 and 16000 bracket it. **Measured outcome: the sweep is flat.** All three sit far above the 296 kg per-cluster load, so all three are non-binding and distinguish nothing. That is a genuine weakness of the sweep's design and **the values were not retuned afterwards** - a separate `--capacities 150 400 8000` run shows the mechanism engaging, with 150 kg labelled *not a realistic truck*. |
+| `vrp.max_trucks_per_cluster` | 20 | **invented, uncited** | USED | Phase 4 | Upper bound on vehicles offered to the solver per cluster. Not a fleet assumption: the solver uses as few as it can and the tables report how many it actually needed (1 per cluster at the committed capacity, 14 across 5 clusters at a binding 150 kg). Too low a value would make a feasible instance infeasible, which is why it is generous. |
+| `vrp.ortools_time_limit_s` | 5.0 | **invented, uncited** | USED | Phase 4 | Per-instance OR-Tools search budget. **This is a WALL-CLOCK limit, and it is the reason no Phase 4 OR-Tools number is reproducible across machines**: a faster or less loaded machine searches more of the space in the same 5 s and can return a different route. Consequently **no test asserts an OR-Tools distance** - the tests assert route validity, every-bin-visited-once and capacity-respected instead - and every OR-Tools row in `docs/PHASE4_RESULTS.md` is labelled same-machine-only. `--quick` uses 1.0 s. |
+| `vrp.first_solution_strategy` | `PATH_CHEAPEST_ARC` | **invented, uncited** | USED | Phase 4 | OR-Tools first-solution heuristic. Chosen once, never swept. `config.py` restricts it to a whitelist in `smartwaste.routing.vrp`, and `tests/test_vrp.py` checks every whitelisted name really exists in the solver's enum, so a typo is a load-time error rather than an `AttributeError` mid-run. |
+| `vrp.local_search_metaheuristic` | `GUIDED_LOCAL_SEARCH` | **invented, uncited** | USED | Phase 4 | OR-Tools improvement phase. As above: one value, no sweep. **No solver tuning was performed at all**, deliberately - a tuned OR-Tools against an untuned 2-opt would be an unfair comparison, and the honest reading of the 0.29% margin is that it is a floor rather than the best OR-Tools could do. |
+| `vrp.compare_clusters` | 20 | **invented, uncited** | USED | Phase 4 | How many KMeans clusters feed the comparison tables. Only the first N are taken, so a `--quick` run (5) is a strict **prefix** of the full one rather than a different sample. |
+| `vrp.compare_day` | 14 | **invented, uncited** | USED | Phase 4 | Which simulated day supplies the bin sets. Every algorithm is compared on the **identical** bins from this one day, so the comparison is paired. Day 14 was picked to match `forecast.warmup_days`, purely so the figure is one the project already uses, **not** because any run was inspected first. **An influential limitation:** one day of one seed means every Phase 4 number has **no spread at all** - Phase 2 at least reported a five-seed range. |
+
+### `roads` - Phase 4 real road network (**area and bin count invented and uncited**)
+
+Road data (c) OpenStreetMap contributors, **ODbL 1.0** - https://www.openstreetmap.org/copyright
+
+**Bin locations on the network are synthetic**: uniform-random points in the bbox snapped to the
+nearest drivable road node. The roads are real; the bins are not.
+
+| Parameter | Value | Source | Status | Validated in | Why |
+|---|---|---|---|---|---|
+| `roads.area_name` | `T. Nagar, Chennai, India` | chosen | USED | Phase 4 | The bounded area, printed in every table header. A **label only** - it is never geocoded, because a name lookup would make the extract depend on a remote search index that could silently return a different place. The bbox below is what is actually downloaded. |
+| `roads.center_lat` | 13.0418 | **invented, uncited** | USED | Phase 4 | Approximate T. Nagar centre. Not surveyed; read off a map. Also the **depot**: the centre is snapped to a road node and used as the single central depot, matching Phase 2's model. |
+| `roads.center_lon` | 80.2341 | **invented, uncited** | USED | Phase 4 | As above. |
+| `roads.box_km` | 3.0 | **invented, uncited** | USED | Phase 4 | Bounding-box side length, so roughly 3 x 3 km. Chosen small on purpose: a bounded download, a 1.52 MB cache and a few thousand nodes, which keeps the run short enough to be honest about. **It also bounds the result**: the measured detour ratio is a 3 km-neighbourhood figure and nothing larger. The bbox is computed with a flat-earth degree conversion (111.32 km/degree, longitude scaled by cos(lat)); `tests/test_roads.py` **measures** that the resulting box really spans 3.0 km within 1% at this latitude. |
+| `roads.network_type` | `drive` | chosen | USED | Phase 4 | OSMnx network filter. Collection trucks use drivable roads, so `drive` rather than `all`. Direction-aware for distance, so one-way streets are respected; **no** turn restrictions, traffic or congestion are modelled. |
+| `roads.n_bins` | 300 | **invented, uncited** | USED | Phase 4 | Synthetic bins snapped to road nodes in the full run; `--quick` uses 50, which is what every published Phase 4 road number actually came from. **NOT comparable with `sim.n_bins` = 5000 on the 100 km grid** - different area, different count, different distance metric - and `config.py` requires `>= 2` because two bins is the smallest set with a distance between them. |
+| `roads.cache_subdir` | `osmnx` | chosen | USED | Phase 4 | Subdirectory of `paths.cache_dir` holding the graphml cache. Gitignored. |
 
 ### `fusion_eval` — size of the Phase 1 experiment
 
@@ -216,10 +279,84 @@ reported.
 | Parameter | Value | Source | Status | Validated in | Why |
 |---|---|---|---|---|---|
 | `paths.data_dir` | `data` | chosen | USED | Phase 3 | Generated datasets. Gitignored. `run_anomaly.py` writes `anomaly_readings.csv` and `anomaly_labels.csv` here - **two separate files**, so the detectors can be handed the readings with no path to the planted truth. |
-| `paths.cache_dir` | `cache` | chosen | PLACEHOLDER | Phase 4 | Downloaded artifacts, e.g. OSMnx road graphs. Gitignored. |
+| `paths.cache_dir` | `cache` | chosen | USED | Phase 4 | Downloaded artifacts. Gitignored. `scripts\run_roads.py` writes the OSMnx road graph to `cache/osmnx/roads_<south>_<west>_<north>_<east>_<network>.graphml` (1.52 MB for the T. Nagar extract). The filename is derived from the bbox and the network filter, so a re-run with the same config hits the cache and needs **no network access** - verified. |
 | `paths.results_dir` | `results` | chosen | USED | Phase 2 | Benchmark tables and figures. `run_benchmark.py` writes `benchmark.csv`/`benchmark.md`; Phase 3 adds `phase3_benchmark.*`, `forecast_eval.*` and `anomaly_eval.*`. Gitignored, so the committed numbers live in `docs/PHASE{1,2,3}_RESULTS.md`. |
 
 ## Not verified / Limitations
+
+New in Phase 4:
+
+- **Phase 4's publication-size runs were NOT RUN.** Every table in `docs/PHASE4_RESULTS.md` is a
+  `--quick` smoke run (5 clusters / 46 bins / 1 s solver budget; 50 road bins). The mechanism and
+  the direction of each finding are established; **no city-scale magnitude is.** This is a
+  deliberate departure from Phase 3, which omitted its un-run tables entirely - the reasoning is
+  stated in that document rather than left implicit.
+- **Truck capacity does not bind, so Phase 2's missing capacity limit flattered nothing.**
+  Measured: 296.24 kg per cluster-day against an 8000 kg truck, 3.7% of capacity. Phase 2 and
+  Phase 3 both listed "no truck capacity, so a tour may collect more than a real truck could
+  carry, which flatters every strategy that visits many bins" as a limitation. **That turns out
+  to have been wrong about this project's own constants** - with ~50 kg bins and ~9 bins per
+  cluster per day there is no plausible truck it would strain. The limitation is therefore
+  *withdrawn as stated* and replaced by this measurement. **No constant was changed to rescue the
+  table.**
+- **OR-Tools does not meaningfully beat the hand-written 2-opt**: 0.29% shorter, against a 2.0%
+  "meaningful" threshold that is a module constant in `smartwaste.phase4` and was declared before
+  any run. Plain 2-opt over nearest neighbour is worth twenty times more (5.88%). CLAUDE.md
+  requires a simple baseline matching the sophisticated one be said plainly, so it is the headline
+  of that section. `ortools` is justified by being able to *express* the capacitated multi-truck
+  problem at all, not by distance.
+- **The noisy-plan-vs-oracle comparison is a TIE, and that is a null result, not a win.** Both
+  rows executed 560.19 km with zero breaches. It follows directly from capacity not binding: a
+  load-cell error of a few kg cannot push a 296 kg tour past 8000 kg, so **sensor noise is never
+  tested at the planning stage.** The machinery is built and tested on hand-built cases where a
+  plan genuinely fails; the city's own numbers simply never exercise it.
+- **The oracle row is a reference line, not a result**, and is labelled *upper bound, not
+  realistic* in the table, the verdict and the code. It is handed the true weight, which no
+  deployment has before the truck arrives. Its zero breaches are **by construction** and
+  `tests/test_vrp.py` pins that invariant rather than measuring it.
+- **A straight line under-states road distance by ~1.45x at the median in T. Nagar**, p10 1.23,
+  p90 2.14, **max 12.02**. This closes a question `docs/ASSUMPTIONS.md` has carried open since
+  Phase 0. Three non-interchangeable aggregates come out of the same data - 1.45 pairwise, 1.54 on
+  total distance, 1.83 on a routed tour - and the pairwise one is primary because it excludes
+  unreachable pairs outright instead of substituting a stand-in.
+- **That ratio must NOT be applied to Phase 2's distances.** One ~3 km area, synthetic bins, one
+  seed. Phase 2's geometry is 100 km of uniform-random points, where long legs dominate and the
+  proportional detour would be *smaller*. No table anywhere draws that comparison, deliberately.
+- **Bin locations on the road network are synthetic.** The roads are real OpenStreetMap data; the
+  bins are uniform-random points snapped to road nodes. A real road network makes synthetic bins
+  look more authoritative than they are, which is why the sentence appears in the module
+  docstring, the stdout header and every table.
+- **One instance set, one day, one seed - so no Phase 4 number has any spread.** The comparison
+  uses the bins strategy (d) selected on day 14 of seed 42. Phase 2 reported a five-seed range;
+  Phase 4 reports a point estimate, which is weaker.
+- **Every OR-Tools number is same-machine-only.** A wall-clock time limit means a different
+  machine can return a different route. Rows come from ortools 9.15.6755 / osmnx 2.1.1 /
+  networkx 3.6.1 on Windows, Python 3.11. The stdlib paths keep the project's byte-identical
+  guarantee and were checked with `cmp` (3,801 and 1,560 bytes).
+- **OR-Tools searches on a rounded integer matrix** (km x 1000, metres), because it requires
+  integer arc costs. Reported distances are recomputed in float from the returned tour with Phase
+  2's own `route_distance`, so the comparison does not also measure the rounding - but the search
+  did see rounded values. Capacity demands are rounded **up**, so that rounding can only overstate
+  a load, never understate one.
+- **The capacity model is crude.** Return-to-depot-and-resume charges distance only: no extra
+  service time, no tipping time, no driver-hour limit. A bin heavier than the whole truck is
+  flagged and still collected, because abandoning it forever would be a different and less honest
+  model.
+- **Capacity is applied per cluster**, and KMeans territories are unchanged from Phase 2, so a
+  truck cannot cross into another cluster. The truck counts are therefore an **upper bound** on
+  what a city-wide VRP would need.
+- **The full Phase 2 benchmark was NOT re-run this phase.** "Phase 2 still reproduces" rests on
+  `tests/test_demand.py::test_smooth_scenario_reproduces_the_phase2_numbers_exactly` (which pins
+  its totals as literals and passes) plus a `git status` check that no Phase 2/3 source file
+  changed - not on a fresh 63-row comparison as Phase 3 did.
+- **Yellow-bin opportunistic collection is STILL not built.** SPEC section 7 lists it under Phase
+  3; it was out of scope there and out of scope here. The paper's known weakness now carries into
+  Phase 5.
+- **No tests touch the network**, which is a strength but also a limit: the road code paths are
+  tested against a hand-built 4-node graph with one edge removed, so OSMnx's own download, snapping
+  and graphml round-trip are exercised only by the smoke runs, never by a test.
+- **GitHub Actions CI has still never executed.** The new `roads` extra in the `types` job and the
+  `routing` chunk are committed but unproven.
 
 New in Phase 3:
 
@@ -297,8 +434,10 @@ New in Phase 3:
 - **The anomaly dataset uses a plain saw-tooth fill process**, not the Phase 3 demand model. It
   is a dataset about *sensor behaviour*, so the fill process is deliberately simple; that also
   means the detectors have never been tested against festival spikes or area heterogeneity.
-- **No VRP, no truck capacity, no road network** - unchanged from Phase 2 and still Phase 4's
-  work. Every Phase 3 distance is Euclidean on the same uniform-random 100 km grid.
+- **No VRP, no truck capacity, no road network** in Phase 3 itself - every Phase 3 distance is
+  Euclidean on the same uniform-random 100 km grid. **Phase 4 built all three**, as a parallel
+  path that left Phase 3's numbers untouched; it did **not** re-run Phase 3's benchmark, which
+  remains NOT RUN.
 
 New in Phase 2:
 
@@ -333,12 +472,15 @@ New in Phase 2:
   an invented cap; nothing spills, nothing is lost, no street-level consequence is represented, and
   there is no penalty cost attached to an overflow event. Overflow is reported as a count beside
   cost, never folded into it.
-- **No truck capacity limit.** A Phase 2 tour may collect more waste than a real truck could
-  carry, which flatters every strategy that visits many bins. Capacity arrives with the VRP in
-  Phase 4.
+- **No truck capacity limit** in Phase 2. **Phase 4 added one and found it does not bind:** a
+  cluster's whole day is ~296 kg against an 8000 kg truck, so this limitation, as originally
+  stated ("flatters every strategy that visits many bins"), **was wrong about this project's own
+  constants.** The Phase 2 numbers are unaffected either way.
 - **Euclidean distance on a uniform-random grid.** Distances are straight lines between random
   points in a 100 x 100 km square, so they are not road distances and the layout is not a city.
-  Phase 4 adds a real road network.
+  **Phase 4 added a real road network for one 3 km Chennai area** and measured a ~1.45x median
+  detour there - but on a different geometry at a different scale, so the Phase 2 distances stand
+  uncorrected and are not comparable with it.
 - **One truck per cluster, single central depot, no time windows, no shift limits.** Travel times
   of thousands of hours per 30 days are spread across 20 trucks with no cap on a driver's day.
 - **KMeans clusters are fixed for the whole month** and computed on bin locations only, ignoring
@@ -388,17 +530,20 @@ New in Phase 1:
 
 Carried over from Phase 0:
 
-- **Every config value not marked `USED` above is a `PLACEHOLDER`.** As of Phase 3 only
-  `cost.truck_capacity_kg`, `routing.n_trucks_per_cluster` and `paths.cache_dir` remain unread
-  by any run; `paths.data_dir` was promoted by the Phase 3 anomaly dataset. **No value anywhere
-  in this file is `VALIDATED`.**
+- **Every config value not marked `USED` above is a `PLACEHOLDER`.** **As of Phase 4 there are
+  none left:** `cost.truck_capacity_kg`, `routing.n_trucks_per_cluster` and `paths.cache_dir` -
+  the last three - were promoted by the Phase 4 VRP and roads runs. **No value anywhere in this
+  file is `VALIDATED`**, and that has not changed: every row is still either `paper`, or a guess
+  of ours with no citation behind it.
 - **Only 1 physical bin was built** (in the paper's hardware work). Everything at city scale is
   simulation.
 - **The 5000-bin, 30-day results are simulation**, not measurements from deployed bins.
 - **All data is synthetic.** Fill levels, sensor readings and faults are generated, not collected.
-- **Distances are Euclidean** on a random grid until Phase 4 adds real road distances; a
-  straight line under-states road distance by an amount we have not yet measured. Phase 2
-  reports Euclidean distances throughout.
+- **Distances are Euclidean** on a random grid everywhere in Phases 1-3. **Phase 4 measured the
+  understatement** this line used to call unmeasured: ~1.45x at the median on real T. Nagar roads
+  (p10 1.23, p90 2.14, max 12.02). **That factor does not apply to the Phase 1-3 numbers** - it
+  was measured on a ~3 km area with synthetic bins, not on the 100 km grid - so every Phase 1-3
+  distance remains Euclidean and uncorrected.
 - **The paper's baseline is naive** (visit every bin daily), so most of any reported saving
   is simply skipping bins rather than better routing. Phase 2 added the fairer baselines
   (b) and (c), and they confirm it: a sensor-free 3-day schedule captures essentially the
