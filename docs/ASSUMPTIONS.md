@@ -6,7 +6,9 @@ wages, speeds, truck capacity). Every such value lives in exactly one place —
 
 **As of Phase 4 every row is `USED`** - the last three `PLACEHOLDER`s
 (`cost.truck_capacity_kg`, `routing.n_trucks_per_cluster`, `paths.cache_dir`) were promoted by the
-Phase 4 VRP and roads runs. **Nothing anywhere in this file is `VALIDATED`** - that requires an
+Phase 4 VRP and roads runs. **Phase 5 added no row at all**: it introduced no config value and no
+new constant, so the parameter table is unchanged from Phase 4. Its one invented quantity - the
+ThingSpeak field mapping - is not a config value, and gets a banner below instead of a row. **Nothing anywhere in this file is `VALIDATED`** - that requires an
 external citation or a real measurement, and no phase has either. `USED` means only "a real run
 reads this and its value changes the output", not "this value is realistic".
 
@@ -72,6 +74,30 @@ reads this and its value changes the output", not "this value is realistic".
 > covers **one** ~3 km area with **synthetic** bin locations, and it does **not** transfer to
 > Phase 2's 100 km grid. Road data is © OpenStreetMap contributors, **ODbL 1.0**.
 
+> ### Banner: the ThingSpeak field mapping is invented and uncited
+>
+> Phase 5 adds **no config row** - no `dashboard` section, no `thingspeak` section, nothing. It does
+> add one invented quantity, and it lives in code rather than in `config/default.yaml`, so it gets a
+> banner instead of a table row.
+>
+> The paper says the NodeMCU sends "fill % and weight" to ThingSpeak and **never states which
+> channel field carries what.** So this mapping is ours, with no citation: `field1`/`field2`/`field3`
+> = ultrasonic distances left/centre/right in cm, `field4` = load-cell weight in kg, `field5` = `Fv`,
+> `field6` = state code (0 GREEN, 1 YELLOW, 2 RED). It is declared in
+> `src/smartwaste/thingspeak.py`, in the sketch, in `firmware/nodemcu_smartbin/README.md` and in
+> `docs/PHASE5_RESULTS.md`, labelled **INVENTED** in each.
+>
+> **The consequence is specific: a real channel could silently disagree and nothing would detect
+> it.** No ThingSpeak channel has ever been contacted by this project, so the mapping has never been
+> checked against a live feed. `field5` and `field6` are deliberately **ignored** on the read path -
+> the fetch script re-derives `Fv` and the state from fields 1-4 - because the point is to check that
+> the firmware's arithmetic and the Python rule agree, not to trust the firmware's own answer.
+>
+> The demo snapshot's size (200 bins, 14 days, 5 clusters) is likewise **not** a config row. It is a
+> set of script constants in the generator, for the same reason `QUICK_N_BINS` in the roads runner is
+> one: it shapes a demonstration, not a result. Promoting it would have added three more
+> invented-and-uncited rows for nothing.
+
 The commands that promoted the `USED` rows below, run from the repo root:
 
 ```
@@ -82,7 +108,13 @@ python scripts\run_forecast.py --seed 42
 python scripts\run_anomaly.py --seed 42
 python scripts\run_phase4_vrp.py --seed 42 --quick
 python scripts\run_roads.py --seed 42 --quick
+python scripts\make_demo_data.py --seed 42
 ```
+
+**The Phase 5 command promotes nothing.** The demo-snapshot generator reads existing `bin`,
+`sensors`, `sim`, `demand`, `cost` and `routing` rows that Phases 1-4 already promoted, and writes
+the committed snapshot the dashboard displays. It introduces no row of its own, and its output is a
+demonstration rather than a result.
 
 **The two Phase 4 commands were run at `--quick` size only.** Their rows below are `USED` because
 a real run genuinely reads each one and its value changes the output — which is all `USED` has ever
@@ -90,7 +122,10 @@ meant here — not because a publication-size run exists. It does not; see
 `docs/PHASE4_RESULTS.md`.
 
 Their output is in `docs/PHASE1_RESULTS.md`, `docs/PHASE2_RESULTS.md`,
-`docs/PHASE3_RESULTS.md` and `docs/PHASE4_RESULTS.md` (and, regenerated, in `results/`).
+`docs/PHASE3_RESULTS.md`, `docs/PHASE4_RESULTS.md` and `docs/PHASE5_RESULTS.md` (and, regenerated,
+in `results/`). The Phase 5 demo snapshot is the one exception to the `results/` pattern: it is
+**committed**, under `dashboard/demo_data/`, because `results/*` is gitignored and a dashboard
+reading from there would be blank on a fresh clone.
 
 ## Status legend
 
@@ -283,6 +318,65 @@ nearest drivable road node. The roads are real; the bins are not.
 | `paths.results_dir` | `results` | chosen | USED | Phase 2 | Benchmark tables and figures. `run_benchmark.py` writes `benchmark.csv`/`benchmark.md`; Phase 3 adds `phase3_benchmark.*`, `forecast_eval.*` and `anomaly_eval.*`. Gitignored, so the committed numbers live in `docs/PHASE{1,2,3}_RESULTS.md`. |
 
 ## Not verified / Limitations
+
+New in Phase 5:
+
+- **The NodeMCU firmware has NEVER been compiled and NEVER been flashed.** `arduino-cli` was
+  unavailable in the session that wrote it and no compilation was attempted; there is no ESP8266
+  toolchain, no board, no waste and no reading. This closes nothing that Phase 0's "no firmware has
+  been written or flashed" line left open - **the firmware is now written, and still not verified.**
+  Every claim about what the sketch does is a claim about what its text says.
+- **No ThingSpeak channel has ever been contacted.** No channel, no real read key, no real write
+  key, and not one reading from the physical bin has ever been ingested. The only executed path is
+  `--offline` against the committed fixture `tests/data/thingspeak_sample.json`; the `urllib` branch
+  has never run. Phase 0's "zero readings from the physical bin" remains exactly true.
+- **The firmware cross-check tests a Python transcription, not the C++.** `smartwaste.firmware_reference`
+  is a hand translation of the sketch's arithmetic, and it agrees with `smartwaste.fusion` on 2000
+  seeded readings plus every threshold boundary. That verifies the rule we *wrote down*. It cannot
+  catch a C++ type error, a `float`-vs-`double` difference, a pin mis-assignment or a library quirk.
+  The companion constants test applies a regular expression to a text file.
+- **The ThingSpeak field mapping is invented and uncited** - see the banner above.
+- **The wiring table in the firmware README is untested.** Pin choices, the HC-SR04 ECHO
+  level-shifter advice and the HX711 calibration procedure are reasoned from datasheets, not from a
+  built circuit.
+- **Every figure the dashboard shows is synthetic or copied.** The demo snapshot is 200 bins x 14
+  days of generated data; the baseline tables are text parsed out of the committed results docs at
+  display time. **Not one figure on the dashboard is a hardware reading**, and a banner says so on
+  every tab.
+- **The demo snapshot is comparable with nothing.** 200 bins is 4% of `sim.n_bins`, 14 days is 47%
+  of `sim.days`, its demand scenario is `heterogeneous` where Phase 2's tables are `smooth`, and its
+  cost constants are the invented ones. No table anywhere places its figures beside a Phase 2
+  number, deliberately.
+- **The dashboard has only ever run headlessly**, via streamlit's in-process `AppTest`.
+  `streamlit run` was never started, so no browser has rendered the page: nothing is known about its
+  layout at a real viewport, on a slow connection, or in a browser's dark mode.
+- **The map deliberately does NOT project onto real coordinates.** The city simulation has no
+  latitude or longitude; bins are uniform-random x/y on a 100 x 100 km square. Painting them onto a
+  real Chennai basemap would have looked better and would have repeated Phase 4's own stated problem
+  - that a real road network makes synthetic bins look more authoritative than they are. No
+  fabricated coordinate exists.
+- **Yellow-bin opportunistic collection is STILL not built.** SPEC section 7 lists it under Phase 3;
+  it was out of scope there, in Phase 4, and here. The demo snapshot makes the consequence visible
+  without fixing it: the YELLOW count climbs to **57 of 200 bins by day 13**, with **11 overflow
+  events** over the 14 days. **Carried to Phase 6.**
+- **Phase 3's strategy benchmark and Phase 4's publication-size runs remain NOT RUN.** Phase 5 did
+  not attempt either and changed nothing they depend on. The dashboard displays both with their own
+  `NOT RUN` and `SMOKE RUN` labels rather than smoothing them over.
+- **GitHub Actions CI has still never executed**, and Phase 5 enlarges what is unproven there: a
+  sixth `dash` chunk and a fourth extra on the `types` job. Both verified locally only.
+- **`.gitattributes` is new and its cross-platform effect is untested.** The `eol=lf` rule for the
+  committed demo files is verified on this Windows machine with `core.autocrlf=true`; no clone on
+  Linux or macOS has confirmed the round trip there.
+- **Two bugs were found by this phase's own new tests**, which is recorded here because the tests
+  are the only reason either was caught: `redact()` stopped at the first already-redacted `api_key=`
+  and would have leaked a second key from a message quoting two URLs; and
+  `importorskip("streamlit.testing.v1")` succeeded on the empty namespace-package shell `pip
+  uninstall` leaves behind, so the `dash` chunk errored instead of skipping. Both are fixed with
+  committed tests. Neither was in Phase 1-4 code.
+- **Phase 5 ran on one machine only** - streamlit 1.66.0 / plotly 7.1.0 / Python 3.11.9 on Windows.
+  The stdlib parts keep the project's byte-identical guarantee (the demo snapshot reproduces
+  byte-for-byte, checked with `cmp`); the `AppTest` results are streamlit-version-dependent, and no
+  test pins a rendered pixel or a layout.
 
 New in Phase 4:
 
@@ -550,13 +644,17 @@ Carried over from Phase 0:
   same saving as the paper's sensor fusion.
 - **Yellow bins are never collected** under the paper's rule, which risks overflow. Still
   true after Phase 3: the dedicated Yellow-bin logic SPEC section 7 lists under Phase 3 was
-  **not built**, being outside this phase's scope.
+  **not built**, being outside this phase's scope. **Still true after Phase 5**, which was out of
+  scope again - but Phase 5 at least made it *visible*: the dashboard's demo snapshot shows the
+  YELLOW count climbing to 57 of 200 bins by day 13 with 11 overflow events. Carried to Phase 6.
 - **The paper's own reported figures** (34.04% travel time, 22.22% cost, 31.85% CO2) are
   reference only. We do not promise to reproduce them and will not tune toward them.
 - **Paper inconsistencies** carried forward knowingly: 30 days vs "three-month"; "34.04%
   distance" vs the travel-time figure in Table I; Eq. 13 printing `F = bD` instead of `E = bD`;
   "1926 percent" for 19-26%.
 - **No firmware has been written or flashed**; no Docker image exists. Both are later phases and
-  will be marked NOT VERIFIED unless actually run.
+  will be marked NOT VERIFIED unless actually run. **Updated in Phase 5: the firmware is now
+  written, and it is still NOT VERIFIED** - never compiled, never flashed, no `arduino-cli`
+  available. Only the second half of this line was discharged. Docker remains untouched.
 - **GitHub Actions CI has never executed.** The workflow is committed but nothing has been
   pushed (CLAUDE.md forbids `git push`), so CI is NOT VERIFIED.
