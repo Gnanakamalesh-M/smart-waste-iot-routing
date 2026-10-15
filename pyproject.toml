@@ -55,6 +55,17 @@ roads = [
     "networkx>=3.3",
     "osmnx>=1.9",
 ]
+# Phase 5's optional extra, and the ONLY extra any Phase 5 code needs. Declared back in Phase 0
+# and unused until now, so Phase 5 documents it rather than inventing a second extra that would
+# install the same two wheels.
+#
+# Both are DASHBOARD-ONLY. `src/smartwaste/dashboard_data.py` -- which is all the dashboard reads
+# through -- is stdlib only, `plotly` is imported LAZILY inside each figure function in
+# `dashboard/app.py`, and `streamlit` is imported only by `dashboard/app.py` itself, which
+# nothing but streamlit and its AppTest harness ever imports. So the unit / sim / ml / routing /
+# slow chunks must stay green with this extra UNINSTALLED; only the `dash` chunk needs it, and
+# its one test is guarded with `pytest.importorskip`. Verified by actually uninstalling both --
+# see docs/PHASE5_RESULTS.md.
 app = [
     "streamlit>=1.37",
     "plotly>=5.23",
@@ -79,7 +90,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src", "tests", "scripts"]
+files = ["src", "tests", "scripts", "tools", "dashboard"]
 warn_unused_ignores = true
 no_implicit_optional = true
 
@@ -99,6 +110,15 @@ ignore_missing_imports = true
 module = ["ortools.*", "osmnx.*", "networkx.*"]
 ignore_missing_imports = true
 
+# Same situation again for the Phase 5 `app` extra: streamlit ships a py.typed marker but plotly
+# does not, and neither resolves at all unless the extra is installed. The CI `types` job
+# installs `.[dev,ml,roads,app]` so these imports resolve -- without it, mypy fails on the
+# `import streamlit` line in dashboard/app.py rather than on anything we wrote. That is exactly
+# how the Phase 3 types job broke, and then the Phase 4 one.
+[[tool.mypy.overrides]]
+module = ["streamlit.*", "plotly.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
@@ -108,4 +128,5 @@ markers = [
     "ml: forecasting and anomaly-detection model tests",
     "routing: clustering, TSP and VRP tests",
     "slow: long-running tests, excluded from the default chunks",
+    "dash: streamlit dashboard smoke tests (needs the app extra)",
 ]

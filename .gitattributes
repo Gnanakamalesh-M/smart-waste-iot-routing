@@ -1,0 +1,9 @@
+# Phase 5. This repo is developed on Windows with core.autocrlf=true, which rewrites LF to CRLF
+# in the working copy on checkout. That is fine for source, and NOT fine for the committed demo
+# snapshot: scripts\make_demo_data.py writes LF deliberately (csv lineterminator="\n") so that
+# regenerating the files on Linux does not show every line as changed, and
+# tests/test_dashboard_data.py asserts the working-copy bytes contain no CRLF. Without the rule
+# below, that test would pass for whoever generated the files and fail for the next person who
+# cloned the repo.
+dashboard/demo_data/*.csv text eol=lf
+dashboard/demo_data/*.json text eol=lf

@@ -1,0 +1,15 @@
+{
+  "command": "python scripts\\make_demo_data.py --seed 42",
+  "days": 14,
+  "depot_x_km": 50.0,
+  "depot_y_km": 50.0,
+  "grid_km": 100.0,
+  "label": "SIMULATED DATA, NOT HARDWARE READINGS",
+  "n_bins": 200,
+  "n_clusters": 5,
+  "scenario": "heterogeneous",
+  "seed": 42,
+  "strategy_key": "d_paper_fusion",
+  "strategy_label": "(d) paper's sensor fusion: 3-sensor MEAN + load cell [the paper's method]",
+  "stuck_bin_fraction": 0.02
+}

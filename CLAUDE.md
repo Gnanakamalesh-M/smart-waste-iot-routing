@@ -14,7 +14,9 @@ Project: smart-waste-iot-routing. Full spec: `docs/SPEC.md`. Phase prompts are g
 - Every script must run with plain `python` (no `make`, no bash-only commands).
 - Use cmd-friendly commands in docs (`findstr`, `.venv\Scripts\activate`).
 - Target Python 3.11 (same as CI). Do not use features newer than 3.11.
-- Tests must be splittable into chunks (pytest markers: `unit`, `sim`, `ml`, `routing`, `slow`).
+- Tests must be splittable into chunks (pytest markers: `unit`, `sim`, `ml`, `routing`, `slow`,
+  `dash`). `dash` was added in Phase 5 for the streamlit dashboard smoke test; it needs the
+  optional `app` extra, and the other five must stay green without it.
   Never rely on one giant test process.
 - Real secrets never go in git. `.env` is gitignored; only `.env.example` is tracked.
 

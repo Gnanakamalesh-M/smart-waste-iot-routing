@@ -24,6 +24,11 @@ htmlcov/
 .env.*
 !.env.example
 
+# Firmware secrets (Phase 5): config.h holds the Wi-Fi password and the ThingSpeak WRITE key.
+# Only config.example.h, with dummy values, is tracked. The .env rules above do not cover a
+# .h file, so this pattern is separate rather than implied.
+firmware/nodemcu_smartbin/config.h
+
 # Generated data, caches and results.
 # File-level patterns (not "data/") so the .gitkeep files stay tracked:
 # a directory-level ignore stops git descending and "!data/.gitkeep" could never re-include it.

@@ -1,0 +1,85 @@
+{
+  "channel": {
+    "id": 0,
+    "name": "smartbin-fixture (NOT a real channel)",
+    "field1": "distance_left_cm",
+    "field2": "distance_center_cm",
+    "field3": "distance_right_cm",
+    "field4": "weight_kg",
+    "field5": "fill_percent",
+    "field6": "state_code",
+    "created_at": "2026-01-01T00:00:00Z",
+    "last_entry_id": 7
+  },
+  "feeds": [
+    {
+      "created_at": "2026-01-01T06:00:00Z",
+      "entry_id": 1,
+      "field1": "92.10",
+      "field2": "91.40",
+      "field3": "92.80",
+      "field4": "1.250",
+      "field5": "7.90",
+      "field6": "0"
+    },
+    {
+      "created_at": "2026-01-01T12:00:00Z",
+      "entry_id": 2,
+      "field1": "38.40",
+      "field2": "36.90",
+      "field3": "37.70",
+      "field4": "18.900",
+      "field5": "62.33",
+      "field6": "1"
+    },
+    {
+      "created_at": "2026-01-01T18:00:00Z",
+      "entry_id": 3,
+      "field1": "14.20",
+      "field2": "12.60",
+      "field3": "13.90",
+      "field4": "31.400",
+      "field5": "86.43",
+      "field6": "2"
+    },
+    {
+      "created_at": "2026-01-02T06:00:00Z",
+      "entry_id": 4,
+      "field1": "not_a_number",
+      "field2": "41.00",
+      "field3": "40.50",
+      "field4": "17.200",
+      "field5": "59.50",
+      "field6": "0"
+    },
+    {
+      "created_at": "2026-01-02T12:00:00Z",
+      "entry_id": 5,
+      "field1": "44.00",
+      "field2": null,
+      "field3": "43.20",
+      "field4": "16.800",
+      "field5": "56.60",
+      "field6": "0"
+    },
+    {
+      "created_at": "2026-01-02T18:00:00Z",
+      "entry_id": 6,
+      "field1": "70.00",
+      "field2": "69.50",
+      "field3": "70.50",
+      "field4": "44.000",
+      "field5": "30.00",
+      "field6": "2"
+    },
+    {
+      "created_at": "2026-01-03T06:00:00Z",
+      "entry_id": 7,
+      "field1": "55.00",
+      "field2": "54.00",
+      "field4": "9.100",
+      "field5": "45.50",
+      "field6": "0"
+    }
+  ]
+}
