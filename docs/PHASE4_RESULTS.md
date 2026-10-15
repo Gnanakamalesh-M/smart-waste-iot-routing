@@ -506,3 +506,4 @@ Expect ~7.8 min, and expect all 63 data rows to match `docs/PHASE2_RESULTS.md`.
 - **GitHub Actions CI has never executed.** `git push` is forbidden by CLAUDE.md, so the workflow
   — including the new `roads` extra in the `types` job and the `routing` chunk — is committed but
   **unproven**. Every check above was run locally on Python 3.11 / Windows.
+  **Correction 2026-10-15: CI has since run green, see README.**

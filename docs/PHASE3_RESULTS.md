@@ -512,3 +512,4 @@ Two mechanisms keep it that way, and they are belt and braces:
 - **GitHub Actions CI has never executed.** `git push` is forbidden by CLAUDE.md, so the workflow
   — including the new conditional `ml`-extra install — is committed but **unproven**. Every check
   above was run locally on Python 3.11 / Windows.
+  **Correction 2026-10-15: CI has since run green, see README.**

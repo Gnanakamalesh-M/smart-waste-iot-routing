@@ -636,6 +636,7 @@ New in Phase 5:
 - **GitHub Actions CI has still never executed.** CLAUDE.md forbids `git push`, so nothing has run
   there. Phase 5 adds a sixth `dash` chunk and a fourth extra to the `types` job, both committed and
   **both unproven in CI**. They were verified locally only.
+  **Correction 2026-10-15: CI has since run green, see README.**
 - **The map's kilometre plot is honest about the grid, which is still not a city.** Bins are
   uniform-random points on a 100 x 100 km square. No road network, no real geography, and
   deliberately no projection onto real coordinates.

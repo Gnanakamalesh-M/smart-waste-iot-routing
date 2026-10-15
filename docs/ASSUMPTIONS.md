@@ -364,6 +364,7 @@ New in Phase 5:
   `NOT RUN` and `SMOKE RUN` labels rather than smoothing them over.
 - **GitHub Actions CI has still never executed**, and Phase 5 enlarges what is unproven there: a
   sixth `dash` chunk and a fourth extra on the `types` job. Both verified locally only.
+  **Correction 2026-10-15: CI has since run green, see README.**
 - **`.gitattributes` is new and its cross-platform effect is untested.** The `eol=lf` rule for the
   committed demo files is verified on this Windows machine with `core.autocrlf=true`; no clone on
   Linux or macOS has confirmed the round trip there.
@@ -451,6 +452,7 @@ New in Phase 4:
   and graphml round-trip are exercised only by the smoke runs, never by a test.
 - **GitHub Actions CI has still never executed.** The new `roads` extra in the `types` job and the
   `routing` chunk are committed but unproven.
+  **Correction 2026-10-15: CI has since run green, see README.**
 
 New in Phase 3:
 
@@ -621,6 +623,7 @@ New in Phase 1:
 - **One physical bin's worth of hardware, zero readings from it.** No value here was measured on
   the physical bin; nothing in Phase 1 touches hardware or ThingSpeak.
 - **CI has still never run** (see below), so the Phase 1 tests are verified locally only.
+  **Correction 2026-10-15: CI has since run green, see README.**
 
 Carried over from Phase 0:
 
@@ -658,3 +661,4 @@ Carried over from Phase 0:
   available. Only the second half of this line was discharged. Docker remains untouched.
 - **GitHub Actions CI has never executed.** The workflow is committed but nothing has been
   pushed (CLAUDE.md forbids `git push`), so CI is NOT VERIFIED.
+  **Correction 2026-10-15: CI has since run green, see README.**

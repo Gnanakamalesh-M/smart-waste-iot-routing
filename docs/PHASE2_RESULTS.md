@@ -435,6 +435,7 @@ fc results\bench1.txt results\bench2.txt
   algorithms.
 - **GitHub Actions CI has never executed.** `git push` is forbidden by CLAUDE.md, so the workflow
   is committed but unproven. Every check above was run locally on Python 3.11 / Windows.
+  **Correction 2026-10-15: CI has since run green, see README.**
 - **The "sensors are not worth it" finding is conditional on our arrival process** being a
   low-variance Gaussian, which is the friendliest possible case for a fixed calendar. We have
   **not** run a heterogeneous or bursty arrival process.

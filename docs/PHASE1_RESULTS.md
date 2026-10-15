@@ -213,6 +213,7 @@ wrong 50.2% of the time, (b) 30.2%, (c) 5.8%.
 - **No hardware, no ThingSpeak, no firmware** is involved in Phase 1.
 - **GitHub Actions CI has never executed** — `git push` is forbidden by CLAUDE.md, so the workflow
   is committed but unproven. All checks above were run locally on Python 3.11 / Windows.
+  **Correction 2026-10-15: CI has since run green, see README.**
 - **The 2.32% control-row figure and every density-dependent number** would change with a
   different `density_cv`; we have no field measurement of real waste-density spread.
 - **`uneven_center_peak` and `stuck_center` are constructions**, not estimates of real-world
